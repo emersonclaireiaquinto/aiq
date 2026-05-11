@@ -31,6 +31,7 @@ import type {
   DeepResearchToolCall,
   DeepResearchFile,
   DeepResearchBannerType,
+  ReportVersion,
 } from './types'
 import { getErrorMeta } from './lib/error-registry'
 import {
@@ -2760,6 +2761,13 @@ export const useChatStore = create<ChatStore>()(
 // ============================================================
 // Selectors
 // ============================================================
+
+const EMPTY_REPORT_VERSIONS: ReportVersion[] = []
+
+/** Stable selector for per-conversation report versions. Returns a referentially
+ *  stable empty array when no versions exist, preventing infinite re-renders. */
+export const selectReportVersions = (state: ChatStore): ReportVersion[] =>
+  state.currentConversation?.reportVersions ?? EMPTY_REPORT_VERSIONS
 
 export const selectHasConnectionError = (state: ChatStore): boolean =>
   state.currentConversation?.messages.some(

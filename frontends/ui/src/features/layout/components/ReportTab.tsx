@@ -18,7 +18,7 @@ import { type FC, type ReactNode, useMemo } from 'react'
 import { Flex, Text } from '@/adapters/ui'
 import { Document } from '@/adapters/ui/icons'
 import { MarkdownRenderer } from '@/shared/components/MarkdownRenderer'
-import { useChatStore } from '@/features/chat'
+import { useChatStore, selectReportVersions } from '@/features/chat'
 import { ExportFooter } from './ExportFooter'
 import { ReportVersionSelector } from './ReportVersionSelector'
 import { ReportDiffView } from './ReportDiffView'
@@ -35,7 +35,7 @@ interface ReportTabProps {
  */
 export const ReportTab: FC<ReportTabProps> = ({ children }) => {
   const { reportContent, reportContentCategory, isStreaming, currentStatus } = useChatStore()
-  const reportVersions = useChatStore((s) => s.currentConversation?.reportVersions ?? [])
+  const reportVersions = useChatStore(selectReportVersions)
   const selectedReportVersionId = useChatStore((s) => s.selectedReportVersionId)
   const reportViewMode = useChatStore((s) => s.reportViewMode)
   const setReportViewMode = useChatStore((s) => s.setReportViewMode)

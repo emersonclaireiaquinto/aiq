@@ -5,14 +5,14 @@
 
 import { type FC } from 'react'
 import { Flex, Text } from '@/adapters/ui'
-import { useChatStore } from '@/features/chat'
+import { useChatStore, selectReportVersions } from '@/features/chat'
 
 /**
  * Horizontal pill row for switching between report versions.
  * Hidden when only one version exists.
  */
 export const ReportVersionSelector: FC = () => {
-  const reportVersions = useChatStore((s) => s.currentConversation?.reportVersions ?? [])
+  const reportVersions = useChatStore(selectReportVersions)
   const selectedReportVersionId = useChatStore((s) => s.selectedReportVersionId)
   const selectReportVersion = useChatStore((s) => s.selectReportVersion)
 

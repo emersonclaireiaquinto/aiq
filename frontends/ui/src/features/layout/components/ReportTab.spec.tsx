@@ -10,7 +10,7 @@ let mockStoreState: Record<string, unknown> = {
   reportContentCategory: null,
   isStreaming: false,
   currentStatus: null,
-  reportVersions: [],
+  currentConversation: { reportVersions: [] },
   selectedReportVersionId: null,
   reportViewMode: 'latest' as const,
   setReportViewMode: vi.fn(),
@@ -22,6 +22,7 @@ vi.mock('@/features/chat', () => ({
     if (selector) return selector(mockStoreState)
     return mockStoreState
   }),
+  selectReportVersions: (s: Record<string, unknown>) => (s.currentConversation as Record<string, unknown> | null)?.reportVersions ?? [],
 }))
 
 // Mock MarkdownRenderer
@@ -56,7 +57,7 @@ describe('ReportTab', () => {
       reportContentCategory: null,
       isStreaming: false,
       currentStatus: null,
-      reportVersions: [],
+      currentConversation: { reportVersions: [] },
       selectedReportVersionId: null,
       reportViewMode: 'latest' as const,
       setReportViewMode: vi.fn(),

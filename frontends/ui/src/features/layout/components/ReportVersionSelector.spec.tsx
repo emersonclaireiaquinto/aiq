@@ -21,6 +21,7 @@ vi.mock('@/features/chat', () => ({
     if (selector) return selector(mockState)
     return mockState
   }),
+  selectReportVersions: (s: typeof mockState) => s.currentConversation?.reportVersions ?? [],
 }))
 
 import { ReportVersionSelector } from './ReportVersionSelector'

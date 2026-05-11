@@ -12,7 +12,7 @@
 
 import { type FC, useCallback, useMemo, useState } from 'react'
 import { Banner, Flex, Button } from '@/adapters/ui'
-import { useChatStore, useIsCurrentSessionBusy } from '@/features/chat'
+import { useChatStore, useIsCurrentSessionBusy, selectReportVersions } from '@/features/chat'
 import { downloadAsMarkdown } from '@/utils/download-as-markdown'
 import { useDownloadPdfRoute } from '@/hooks/use-download-pdf'
 import { Download } from '@/adapters/ui/icons'
@@ -28,7 +28,7 @@ interface ExportFooterProps {
  */
 export const ExportFooter: FC<ExportFooterProps> = ({ disabled }) => {
   const reportContent = useChatStore((state) => state.reportContent)
-  const reportVersions = useChatStore((state) => state.currentConversation?.reportVersions ?? [])
+  const reportVersions = useChatStore(selectReportVersions)
   const selectedReportVersionId = useChatStore((state) => state.selectedReportVersionId)
   const conversationTitle = useChatStore((state) => state.currentConversation?.title)
   const { downloadPdf, isLoading: isPdfLoading, error: pdfError, clearError: clearPdfError } = useDownloadPdfRoute()

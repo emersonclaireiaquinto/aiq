@@ -14,7 +14,7 @@ let mockChatState: Record<string, unknown> = {
   reportContent: 'Some report content',
   isDeepResearchStreaming: false,
   deepResearchStatus: null as 'submitted' | 'running' | 'success' | 'failure' | 'interrupted' | null,
-  currentConversation: { title: 'AI Market Trends' },
+  currentConversation: { title: 'AI Market Trends', reportVersions: [] },
 }
 
 vi.mock('@/features/chat', () => ({
@@ -25,6 +25,7 @@ vi.mock('@/features/chat', () => ({
     return mockChatState
   },
   useIsCurrentSessionBusy: () => mockIsBusy,
+  selectReportVersions: (s: any) => s.currentConversation?.reportVersions ?? [],
 }))
 
 // Mock the download utilities
