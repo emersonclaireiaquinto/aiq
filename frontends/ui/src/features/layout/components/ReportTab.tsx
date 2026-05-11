@@ -41,6 +41,15 @@ export const ReportTab: FC<ReportTabProps> = ({ children }) => {
   const reportViewMode = useChatStore((s) => s.reportViewMode)
   const setReportViewMode = useChatStore((s) => s.setReportViewMode)
 
+  console.log('[ReportTab] render', {
+    reportContentLen: typeof reportContent === 'string' ? reportContent.length : typeof reportContent,
+    reportContentCategory,
+    reportVersionsLen: reportVersions.length,
+    reportViewMode,
+    isStreaming,
+    currentStatus,
+  })
+
   const versionedContent = useMemo(() => {
     if (reportVersions.length === 0) return null
     const selected = reportVersions.find((v) => v.versionId === selectedReportVersionId)
