@@ -231,7 +231,14 @@ class ReportFollowup:
         result = await graph.ainvoke(sub_state, config=config)
 
         result_messages = result.get("messages", []) if isinstance(result, dict) else result.messages
-        new_messages = result_messages[len(messages) :]
+        new_messages = result_messages[len(messages):]
+
+        # Check if request_deep_research was called — bubble the job signal
+        # up so the frontend can start SSE streaming.
+        for m in new_messages:
+            content = getattr(m, "content", "")
+            if isinstance(content, str) and "Deep research job submitted. Job ID:" in content:
+                return {"messages": [AIMessage(content=content)]}
 
         final_ai = None
         for m in reversed(new_messages):
