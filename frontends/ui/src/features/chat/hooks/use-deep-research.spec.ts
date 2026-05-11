@@ -37,6 +37,9 @@ const mockPatchConversationMessage = vi.fn()
 const mockPersistDeepResearchToSession = vi.fn()
 const mockAddDeepResearchBanner = vi.fn()
 const mockSetStreamLoaded = vi.fn()
+const mockAddReportVersion = vi.fn()
+const mockSetPendingReportIntegration = vi.fn()
+const mockSetFollowupDeepResearch = vi.fn()
 
 let mockStoreState = {
   deepResearchJobId: null as string | null,
@@ -48,9 +51,10 @@ let mockStoreState = {
   deepResearchToolCalls: [] as unknown[],
   deepResearchCitations: [] as unknown[],
   deepResearchOwnerConversationId: 'test-conv-123',
-  currentConversation: { id: 'test-conv-123' } as { id: string } | null,
+  currentConversation: { id: 'test-conv-123', reportVersions: [], messages: [] } as { id: string; reportVersions?: unknown[]; messages?: unknown[] } | null,
   activeDeepResearchMessageId: null as string | null,
   currentUserMessageId: 'user-msg-1' as string | null,
+  isFollowupDeepResearch: false,
 }
 
 vi.mock('../store', () => ({
@@ -188,9 +192,10 @@ describe('useDeepResearch', () => {
       deepResearchToolCalls: [],
       deepResearchCitations: [],
       deepResearchOwnerConversationId: 'test-conv-123',
-      currentConversation: { id: 'test-conv-123' },
+      currentConversation: { id: 'test-conv-123', reportVersions: [], messages: [] },
       activeDeepResearchMessageId: null,
       currentUserMessageId: 'user-msg-1',
+      isFollowupDeepResearch: false,
     }
     vi.mocked(useChatStore).getState = vi.fn(() => ({
       ...mockStoreState,
@@ -566,6 +571,9 @@ describe('useDeepResearch', () => {
         deepResearchToolCalls: [],
         deepResearchCitations: [],
         addErrorCard: mockAddErrorCard,
+        addReportVersion: mockAddReportVersion,
+        setPendingReportIntegration: mockSetPendingReportIntegration,
+        setFollowupDeepResearch: mockSetFollowupDeepResearch,
         deepResearchOwnerConversationId: 'test-conv-123',
         activeDeepResearchMessageId: 'msg-123',
       })) as unknown as typeof useChatStore.getState
@@ -991,6 +999,9 @@ describe('useDeepResearch', () => {
           { isCited: false },
         ],
         addErrorCard: mockAddErrorCard,
+        addReportVersion: mockAddReportVersion,
+        setPendingReportIntegration: mockSetPendingReportIntegration,
+        setFollowupDeepResearch: mockSetFollowupDeepResearch,
         deepResearchOwnerConversationId: 'test-conv-123',
         activeDeepResearchMessageId: 'msg-123',
       })) as unknown as typeof useChatStore.getState

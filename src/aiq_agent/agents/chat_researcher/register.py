@@ -553,6 +553,10 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
             import json as _json
 
             latest = post_versions[-1]
+            parent_content = None
+            if latest.parent_version_id:
+                parent = await report_version_store.get(nat_context_conversation_id, latest.parent_version_id)
+                parent_content = parent.content if parent else None
             response_content = _json.dumps({
                 "message": response_content,
                 "report_version": {
@@ -560,6 +564,7 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
                     "parentVersionId": latest.parent_version_id,
                     "content": latest.content,
                     "triggeringQuery": latest.triggering_query,
+                    "parentContent": parent_content,
                 },
             })
             logger.info("Embedding updated report version %s in response", latest.version_id)

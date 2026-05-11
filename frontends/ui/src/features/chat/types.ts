@@ -231,6 +231,8 @@ export interface Conversation {
   updatedAt: Date
   /** Per-session enabled data source IDs (persisted across refresh) */
   enabledDataSourceIds?: string[]
+  /** Report versions for this conversation (oldest → newest) */
+  reportVersions?: ReportVersion[]
 }
 
 /** Pending human interaction from agent */
@@ -432,9 +434,7 @@ export interface ChatState {
   /** Messages for the PlanTab (clarification questions, plan preview, etc.) */
   planMessages: PlanMessage[]
 
-  // Report versioning state
-  /** All report versions for the current conversation (oldest → newest) */
-  reportVersions: ReportVersion[]
+  // Report versioning state (versions are stored per-conversation on Conversation.reportVersions)
   /** Currently selected report version ID (null = latest) */
   selectedReportVersionId: string | null
   /** View mode for report display */

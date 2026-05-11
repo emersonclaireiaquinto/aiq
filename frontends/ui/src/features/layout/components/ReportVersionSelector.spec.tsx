@@ -6,8 +6,12 @@ import { vi, describe, test, expect, beforeEach } from 'vitest'
 
 const mockSelectReportVersion = vi.fn()
 
+type MockVersion = { versionId: string; parentVersionId: string | null; content: string; triggeringQuery: string; createdAt: Date }
+
+let mockVersions: MockVersion[] = []
+
 let mockState = {
-  reportVersions: [] as { versionId: string; parentVersionId: string | null; content: string; triggeringQuery: string; createdAt: Date }[],
+  currentConversation: { reportVersions: mockVersions } as { reportVersions: MockVersion[] } | null,
   selectedReportVersionId: null as string | null,
   selectReportVersion: mockSelectReportVersion,
 }
@@ -24,8 +28,9 @@ import { ReportVersionSelector } from './ReportVersionSelector'
 describe('ReportVersionSelector', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockVersions = []
     mockState = {
-      reportVersions: [],
+      currentConversation: { reportVersions: mockVersions },
       selectedReportVersionId: null,
       selectReportVersion: mockSelectReportVersion,
     }
@@ -37,7 +42,7 @@ describe('ReportVersionSelector', () => {
   })
 
   test('renders nothing when one version', () => {
-    mockState.reportVersions = [
+    mockState.currentConversation!.reportVersions = [
       { versionId: 'v1', parentVersionId: null, content: 'Report v1', triggeringQuery: 'First query', createdAt: new Date('2026-01-01') },
     ]
     mockState.selectedReportVersionId = 'v1'
@@ -47,7 +52,7 @@ describe('ReportVersionSelector', () => {
   })
 
   test('renders pills for multiple versions', () => {
-    mockState.reportVersions = [
+    mockState.currentConversation!.reportVersions = [
       { versionId: 'v1', parentVersionId: null, content: 'Report v1', triggeringQuery: 'First query', createdAt: new Date('2026-01-01') },
       { versionId: 'v2', parentVersionId: 'v1', content: 'Report v2', triggeringQuery: 'Add section on X', createdAt: new Date('2026-01-02') },
     ]
@@ -60,7 +65,7 @@ describe('ReportVersionSelector', () => {
   })
 
   test('marks the selected version as pressed', () => {
-    mockState.reportVersions = [
+    mockState.currentConversation!.reportVersions = [
       { versionId: 'v1', parentVersionId: null, content: 'Report v1', triggeringQuery: 'First query', createdAt: new Date('2026-01-01') },
       { versionId: 'v2', parentVersionId: 'v1', content: 'Report v2', triggeringQuery: 'Second query', createdAt: new Date('2026-01-02') },
     ]
@@ -73,7 +78,7 @@ describe('ReportVersionSelector', () => {
   })
 
   test('calls selectReportVersion on click', () => {
-    mockState.reportVersions = [
+    mockState.currentConversation!.reportVersions = [
       { versionId: 'v1', parentVersionId: null, content: 'Report v1', triggeringQuery: 'First query', createdAt: new Date('2026-01-01') },
       { versionId: 'v2', parentVersionId: 'v1', content: 'Report v2', triggeringQuery: 'Second query', createdAt: new Date('2026-01-02') },
     ]
@@ -86,7 +91,7 @@ describe('ReportVersionSelector', () => {
   })
 
   test('shows triggering query in tooltip', () => {
-    mockState.reportVersions = [
+    mockState.currentConversation!.reportVersions = [
       { versionId: 'v1', parentVersionId: null, content: 'Report v1', triggeringQuery: 'Research about AI safety', createdAt: new Date('2026-01-01') },
       { versionId: 'v2', parentVersionId: 'v1', content: 'Report v2', triggeringQuery: 'Add a section on alignment', createdAt: new Date('2026-01-02') },
     ]
@@ -99,7 +104,7 @@ describe('ReportVersionSelector', () => {
   })
 
   test('renders three versions correctly', () => {
-    mockState.reportVersions = [
+    mockState.currentConversation!.reportVersions = [
       { versionId: 'v1', parentVersionId: null, content: 'v1', triggeringQuery: 'q1', createdAt: new Date('2026-01-01') },
       { versionId: 'v2', parentVersionId: 'v1', content: 'v2', triggeringQuery: 'q2', createdAt: new Date('2026-01-02') },
       { versionId: 'v3', parentVersionId: 'v2', content: 'v3', triggeringQuery: 'q3', createdAt: new Date('2026-01-03') },

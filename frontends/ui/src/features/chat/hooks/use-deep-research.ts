@@ -289,13 +289,16 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
 
             if (status === 'success') {
               setCurrentStatus('complete')
-              const { reportContent: currentReport, deepResearchLLMSteps, deepResearchToolCalls, reportVersions, addReportVersion, isFollowupDeepResearch, setPendingReportIntegration, setFollowupDeepResearch } = state
+              const { reportContent: currentReport, deepResearchLLMSteps, deepResearchToolCalls, addReportVersion, isFollowupDeepResearch, setPendingReportIntegration, setFollowupDeepResearch } = state
               const totalTokens = deepResearchLLMSteps.reduce((sum, step) => sum + (step.usage?.input_tokens || 0) + (step.usage?.output_tokens || 0), 0)
               const toolCallCount = deepResearchToolCalls.length
               const hasReport = Boolean(currentReport?.trim())
 
-              if (hasReport && currentReport) {
+              // Only add a version for initial deep research, not followup.
+              // Followup versions are created by the report_followup agent via edit_report/rewrite_report.
+              if (hasReport && currentReport && !isFollowupDeepResearch) {
                 const conv = state.currentConversation
+                const reportVersions = conv?.reportVersions ?? []
                 const lastUserMsg = conv?.messages?.filter(m => m.role === 'user').pop()
                 const prevVersion = reportVersions.length > 0 ? reportVersions[reportVersions.length - 1] : null
                 addReportVersion({

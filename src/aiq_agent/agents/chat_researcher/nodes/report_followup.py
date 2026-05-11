@@ -161,14 +161,10 @@ class ReportFollowup:
                             p.get("text", "") for p in report_content if isinstance(p, dict) and p.get("type") == "text"
                         )
                     if isinstance(report_content, str):
-                        version = ReportVersion(
-                            conversation_id=conversation_id,
-                            content=report_content,
-                            triggering_query=instruction,
-                            parent_version_id=latest.version_id if latest else None,
+                        return (
+                            f"Deep research completed. Here is the updated content. "
+                            f"Use edit_report or rewrite_report to integrate it into the report:\n\n{report_content}"
                         )
-                        await store.append(version)
-                        return f"Deep research completed. Report updated (version {version.version_id})."
                 return "Deep research completed but produced no output."
 
             return "Deep research is not configured. Use edit_report or rewrite_report to modify the report directly."

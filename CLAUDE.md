@@ -127,9 +127,13 @@ After deep research produces a report, follow-up messages are handled by the `re
 
 **Report version backfill (async mode):** In async deep research mode, the report is produced by a Dask worker. On the next follow-up, `_run()` in `register.py` queries the EventStore for the `final_report` artifact and backfills the `ReportVersionStore`. Job IDs are tracked in the process-local `_pending_deep_research_jobs` dict.
 
-**Edited report sync to frontend:** When `edit_report`/`rewrite_report` tools modify the report, `_run()` embeds the updated `report_version` as JSON in the response. The frontend's WebSocket `onResponse` handler detects this, updates `reportContent` and `reportVersions`.
+**Edited report sync to frontend:** When `edit_report`/`rewrite_report` tools modify the report, `_run()` embeds the updated `report_version` as JSON in the response (including `parentContent` for diff support). The frontend's WebSocket `onResponse` handler detects this, backfills the parent version if missing, and updates `reportContent` and the conversation's `reportVersions`.
 
-**Deep research auto-integration:** When `request_deep_research` is called from the followup agent, the frontend marks it as `isFollowupDeepResearch`. On job completion, the frontend auto-sends a system message with the research result, triggering the followup agent to integrate it via edit tools.
+**Report versions are per-conversation:** `reportVersions` is stored on each `Conversation` object (not global store state), persisted via localStorage inside the conversation. When switching conversations, `selectConversation` restores `selectedReportVersionId` from the target conversation's versions. This ensures each chat has independent report version history.
+
+**Inline deep research from followup:** When `request_deep_research` runs inline (not async), it returns the raw research content to the followup agent without creating a version. The followup agent then integrates results via `edit_report`/`rewrite_report`, which creates the single visible version.
+
+**Deep research auto-integration (async):** When `request_deep_research` is called from the followup agent in async mode, the frontend marks it as `isFollowupDeepResearch`. On SSE job completion, the frontend skips creating a version (only the followup agent's integration creates one) and auto-sends a system message with the research result, triggering the followup agent to integrate it via edit tools.
 
 ### Known technical debt (TODO: move to backend)
 
@@ -137,5 +141,4 @@ Several pieces of logic currently live on the frontend that should be backend-si
 
 1. **Report version backfill** — relies on `_pending_deep_research_jobs` (process-local dict, lost on restart). Should move to persistent storage (SQL-backed `ReportVersionStore`).
 2. **Deep research auto-integration** — the frontend orchestrates feeding deep research results back to the followup agent. If the user closes the tab, the integration is lost. Should be a backend job completion callback.
-3. **Report version persistence** — `reportVersions` is stored in localStorage. Should be persisted server-side so versions survive across devices/sessions.
-4. **Report content source of truth** — `reportContent` (SSE stream) and `reportVersions` (edit tools) are two separate sources. The frontend resolves them with a priority fallback. A single backend-authoritative source would be cleaner.
+3. **Report content source of truth** — `reportContent` (SSE stream) and `reportVersions` (edit tools) are two separate sources. The frontend resolves them with a priority fallback. A single backend-authoritative source would be cleaner.

@@ -251,6 +251,25 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
             const parsed = JSON.parse(content)
             if (parsed.report_version) {
               const { setReportContent, addReportVersion } = useChatStore.getState()
+              const convVersions = useChatStore.getState().currentConversation?.reportVersions ?? []
+
+              // If the parent version doesn't exist locally but parent content is provided,
+              // backfill it so the diff tab can show before/after comparison
+              if (parsed.report_version.parentVersionId && parsed.report_version.parentContent) {
+                const parentExists = convVersions.some(
+                  (v: { versionId: string }) => v.versionId === parsed.report_version.parentVersionId
+                )
+                if (!parentExists) {
+                  addReportVersion({
+                    versionId: parsed.report_version.parentVersionId,
+                    parentVersionId: null,
+                    content: parsed.report_version.parentContent,
+                    triggeringQuery: 'Deep research',
+                    createdAt: new Date(Date.now() - 1000),
+                  })
+                }
+              }
+
               setReportContent(parsed.report_version.content)
               addReportVersion({
                 versionId: parsed.report_version.versionId,
