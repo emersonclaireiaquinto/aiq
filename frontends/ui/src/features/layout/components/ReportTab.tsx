@@ -14,15 +14,14 @@
 
 'use client'
 
-import { type FC, type ReactNode, useMemo, lazy, Suspense } from 'react'
+import { type FC, type ReactNode, useMemo } from 'react'
 import { Flex, Text } from '@/adapters/ui'
 import { Document } from '@/adapters/ui/icons'
 import { MarkdownRenderer } from '@/shared/components/MarkdownRenderer'
 import { useChatStore } from '@/features/chat'
 import { ExportFooter } from './ExportFooter'
 import { ReportVersionSelector } from './ReportVersionSelector'
-
-const ReportDiffView = lazy(() => import('./ReportDiffView').then((m) => ({ default: m.ReportDiffView })))
+import { ReportDiffView } from './ReportDiffView'
 
 interface ReportTabProps {
   /** Optional custom content to display instead of store content */
@@ -36,19 +35,10 @@ interface ReportTabProps {
  */
 export const ReportTab: FC<ReportTabProps> = ({ children }) => {
   const { reportContent, reportContentCategory, isStreaming, currentStatus } = useChatStore()
-  const reportVersions = useChatStore((s) => s.currentConversation?.reportVersions ?? [])
-  const selectedReportVersionId = useChatStore((s) => s.currentConversation?.selectedReportVersionId ?? null)
+  const reportVersions = useChatStore((s) => s.reportVersions)
+  const selectedReportVersionId = useChatStore((s) => s.selectedReportVersionId)
   const reportViewMode = useChatStore((s) => s.reportViewMode)
   const setReportViewMode = useChatStore((s) => s.setReportViewMode)
-
-  console.log('[ReportTab] render', {
-    reportContentLen: typeof reportContent === 'string' ? reportContent.length : typeof reportContent,
-    reportContentCategory,
-    reportVersionsLen: reportVersions.length,
-    reportViewMode,
-    isStreaming,
-    currentStatus,
-  })
 
   const versionedContent = useMemo(() => {
     if (reportVersions.length === 0) return null
@@ -73,7 +63,7 @@ export const ReportTab: FC<ReportTabProps> = ({ children }) => {
 
   return (
     <Flex direction="col" className="h-full">
-      {/* <ReportVersionSelector /> */}
+      <ReportVersionSelector />
 
       {canShowDiff && !isEmpty && !isResearchNotes && (
         <Flex align="center" gap="1" className="shrink-0 mb-3">
@@ -113,11 +103,9 @@ export const ReportTab: FC<ReportTabProps> = ({ children }) => {
               Report content will appear here when available.
             </Text>
           </Flex>
-        ) : reportViewMode === 'diff' && canShowDiff && parentContent ? (
+        ) : reportViewMode === 'diff' && canShowDiff ? (
           <div className="flex-1">
-            <Suspense fallback={<Text kind="body/regular/sm" className="text-subtle">Loading diff...</Text>}>
-              <ReportDiffView oldContent={parentContent} newContent={reportContentStr} />
-            </Suspense>
+            <ReportDiffView oldContent={parentContent} newContent={reportContentStr} />
           </div>
         ) : isResearchNotes ? (
           /* Research notes: preview treatment */
@@ -152,8 +140,8 @@ export const ReportTab: FC<ReportTabProps> = ({ children }) => {
         )}
       </Flex>
 
-      {/* Export footer - temporarily disabled for debugging */}
-      {/* <ExportFooter /> */}
+      {/* Export footer - only meaningful for the final report */}
+      <ExportFooter />
     </Flex>
   )
 }

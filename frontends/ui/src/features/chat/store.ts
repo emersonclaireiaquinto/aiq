@@ -64,6 +64,8 @@ type PersistedChatState = {
   conversations: ChatState['conversations']
   currentConversation: ChatState['currentConversation']
   pendingInteraction: ChatState['pendingInteraction']
+  reportVersions: ChatState['reportVersions']
+  selectedReportVersionId: ChatState['selectedReportVersionId']
 }
 
 type PersistedChatStorageValue = StorageValue<PersistedChatState>
@@ -88,6 +90,8 @@ const prunePersistedChatState = (value: PersistedChatStorageValue): PersistedCha
       conversations,
       currentConversation: currentConversationId as unknown as Conversation | null,
       pendingInteraction: state.pendingInteraction ?? null,
+      reportVersions: state.reportVersions ?? [],
+      selectedReportVersionId: state.selectedReportVersionId ?? null,
     },
   }
 }
@@ -111,14 +115,12 @@ const createResilientStorage = (): PersistStorage<PersistedChatState> | undefine
         raw.state.currentConversation = conversations.find((c) => c.id === storedId) ?? null
       }
 
-      // Reconstruct Date objects in conversation reportVersions (JSON serializes them as strings)
-      for (const conv of raw.state.conversations ?? []) {
-        if (conv.reportVersions) {
-          conv.reportVersions = conv.reportVersions.map((v) => ({
-            ...v,
-            createdAt: new Date(v.createdAt as unknown as string),
-          }))
-        }
+      // Reconstruct Date objects in reportVersions (JSON serializes them as strings)
+      if (raw.state.reportVersions) {
+        raw.state.reportVersions = raw.state.reportVersions.map((v) => ({
+          ...v,
+          createdAt: new Date(v.createdAt),
+        }))
       }
 
       return raw
@@ -155,6 +157,8 @@ const createResilientStorage = (): PersistStorage<PersistedChatState> | undefine
               conversations: [],
               currentConversation: null,
               pendingInteraction: null,
+              reportVersions: [],
+              selectedReportVersionId: null,
             },
           })
 
@@ -208,6 +212,8 @@ const initialState: ChatState = {
   // State for PlanTab
   planMessages: [],
   // Report versioning
+  reportVersions: [],
+  selectedReportVersionId: null,
   reportViewMode: 'latest' as const,
   isFollowupDeepResearch: false,
   pendingReportIntegration: null,
@@ -383,10 +389,6 @@ export const useChatStore = create<ChatStore>()(
               activeDeepResearchMessageId: null,
               // Clear HITL pending interaction
               pendingInteraction: null,
-              // Reset report follow-up state for new conversation
-              reportViewMode: 'latest' as const,
-              isFollowupDeepResearch: false,
-              pendingReportIntegration: null,
             }),
             false,
             'createConversation'
@@ -549,10 +551,6 @@ export const useChatStore = create<ChatStore>()(
                 deepResearchStreamLoaded: false,
                 reportContent: '',
                 reportContentCategory: null,
-                // Reset followup flags but keep reportVersions — they're
-                // persisted and will be restored for the selected conversation
-                isFollowupDeepResearch: false,
-                pendingReportIntegration: null,
               },
               false,
               'selectConversation'
@@ -2653,19 +2651,13 @@ export const useChatStore = create<ChatStore>()(
         // ============================================================
 
         addReportVersion: (version) => {
-          const { currentConversation, conversations } = get()
-          if (!currentConversation) return
-          const versions = currentConversation.reportVersions ?? []
-          if (versions.find((v) => v.versionId === version.versionId)) return
-          const updated = {
-            ...currentConversation,
-            reportVersions: [...versions, version],
-            selectedReportVersionId: version.versionId,
-          }
+          const state = get()
+          const existing = state.reportVersions.find((v) => v.versionId === version.versionId)
+          if (existing) return
           set(
             {
-              currentConversation: updated,
-              conversations: conversations.map((c) => (c.id === updated.id ? updated : c)),
+              reportVersions: [...state.reportVersions, version],
+              selectedReportVersionId: version.versionId,
               reportViewMode: 'latest',
             },
             false,
@@ -2674,18 +2666,7 @@ export const useChatStore = create<ChatStore>()(
         },
 
         selectReportVersion: (versionId) => {
-          const { currentConversation, conversations } = get()
-          if (!currentConversation) return
-          const updated = { ...currentConversation, selectedReportVersionId: versionId }
-          set(
-            {
-              currentConversation: updated,
-              conversations: conversations.map((c) => (c.id === updated.id ? updated : c)),
-              reportViewMode: 'latest',
-            },
-            false,
-            'selectReportVersion'
-          )
+          set({ selectedReportVersionId: versionId, reportViewMode: 'latest' }, false, 'selectReportVersion')
         },
 
         setReportViewMode: (mode) => {
@@ -2761,6 +2742,9 @@ export const useChatStore = create<ChatStore>()(
           currentConversation: state.currentConversation,
           // Persist pending HITL interaction for page refresh recovery
           pendingInteraction: state.pendingInteraction,
+          // Persist report versions so edits survive page refresh
+          reportVersions: state.reportVersions,
+          selectedReportVersionId: state.selectedReportVersionId,
         }),
       }
     ),
