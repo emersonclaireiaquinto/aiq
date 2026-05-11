@@ -175,6 +175,7 @@ class ShallowResearcherAgent:
                 user_info=user_info,
                 current_datetime=current_datetime,
                 available_documents=[doc.model_dump() for doc in available_documents],
+                report_context=state.report_context,
             )
             # DEBUG: Log the system prompt (can be removed in production)
             if os.environ.get("DEBUG_PROMPTS"):

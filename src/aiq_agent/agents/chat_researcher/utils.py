@@ -113,6 +113,25 @@ def _extract_query_from_text(text: str) -> tuple[str, list[str] | None]:
     return (text, None)
 
 
+def extract_report_context(payload: Any) -> str | None:
+    """Extract report_context from the message payload if present."""
+    if isinstance(payload, dict):
+        content = payload.get("content", {}) if isinstance(payload.get("content"), dict) else {}
+        messages = content.get("messages", [])
+        if isinstance(messages, list) and messages:
+            for msg in reversed(messages):
+                if isinstance(msg, dict) and _is_user_role(msg.get("role")):
+                    text = _extract_text_from_message(msg)
+                    if text and text.strip().startswith("{"):
+                        try:
+                            parsed = json.loads(text.strip())
+                            if isinstance(parsed, dict) and parsed.get("report_context"):
+                                return parsed["report_context"]
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+    return None
+
+
 def _extract_query_and_sources(payload: Any) -> tuple[str, list[str] | None]:
     """Extract query text and data sources from various payload formats.
 

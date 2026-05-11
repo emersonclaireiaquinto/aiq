@@ -132,12 +132,16 @@ export class NATWebSocketClient {
    * @param content - The message text content (query)
    * @param enabledDataSources - Optional array of enabled data source IDs to include in the query
    */
-  sendMessage = (content: string, enabledDataSources?: string[]): void => {
+  sendMessage = (content: string, enabledDataSources?: string[], reportContext?: string): void => {
     // Format the text content as JSON with query and data_sources
-    const textContent = JSON.stringify({
+    const payload: Record<string, unknown> = {
       query: content,
       data_sources: enabledDataSources ?? [],
-    })
+    }
+    if (reportContext) {
+      payload.report_context = reportContext
+    }
+    const textContent = JSON.stringify(payload)
 
     const messageId = this.generateMessageId()
     this.activeParentId = messageId

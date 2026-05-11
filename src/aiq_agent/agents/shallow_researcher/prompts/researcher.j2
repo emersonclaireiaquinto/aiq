@@ -56,6 +56,17 @@ The user has uploaded the following documents to the knowledge base:
 **CRITICAL**: When the user asks to summarize, describe, explain, or query their uploaded documents, you MUST use the **knowledge_search** tool — NOT web search. Only **knowledge_search** has access to these uploaded documents.
 {% endif %}
 
+{% if report_context %}
+
+## Active Research Report
+
+A deep research report has been generated in this session. Use it to ground your answers when the user asks about the report's content. Do NOT attempt to edit or rewrite the report — editing is handled by a separate workflow.
+
+<report>
+{{ report_context }}
+</report>
+{% endif %}
+
 {#- 4. OPERATIONAL RULES -#}
 {% if ns.has_web %}
 ## Query rewriting (before calling search tools)

@@ -650,10 +650,15 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
       setStreaming(true)
       setLoading(true)
 
+      // Include report content in follow-up messages so the backend can
+      // populate the ReportVersionStore for report_followup routing.
+      const { reportContent: currentReportContent } = storeState
+      const reportContext = currentReportContent?.trim() ? currentReportContent : undefined
+
       // Helper to actually send the message
       const doSend = () => {
         if (wsClientRef.current?.isConnected()) {
-          wsClientRef.current.sendMessage(content, dataSourcesForMessage)
+          wsClientRef.current.sendMessage(content, dataSourcesForMessage, reportContext)
           setLoading(false)
         } else {
           addErrorCard('connection.failed', 'WebSocket connection failed')

@@ -46,86 +46,11 @@ from nat.data_models.function import FunctionBaseConfig
 
 from .models import ChatResearcherState
 from .utils import _extract_query_and_sources
+from .utils import extract_report_context
 
 logger = logging.getLogger(__name__)
 
 _ensure_otel_redaction_registered()
-
-_JOB_ID_PATTERN = "Deep research job submitted. Job ID: "
-
-
-async def _backfill_report_version_from_events(checkpointer, conversation_id: str, store) -> None:
-    """Backfill ReportVersionStore from a completed async deep research job.
-
-    Reads the checkpoint to find a prior "Deep research job submitted" message,
-    then queries the event store for the final report artifact.
-    """
-    import json
-    import os
-    import re
-
-    from aiq_agent.common.report_version_store import ReportVersion
-
-    checkpoint_tuple = await checkpointer.aget_tuple({"configurable": {"thread_id": conversation_id}})
-    if not checkpoint_tuple or not checkpoint_tuple.checkpoint:
-        return
-
-    channel_values = checkpoint_tuple.checkpoint.get("channel_values", {})
-    messages = channel_values.get("messages", [])
-    if not messages:
-        return
-
-    job_id = None
-    triggering_query = ""
-    for msg in messages:
-        content = getattr(msg, "content", "")
-        if isinstance(content, str) and _JOB_ID_PATTERN in content:
-            match = re.search(r"Job ID: ([a-f0-9-]+)", content)
-            if match:
-                job_id = match.group(1)
-        if hasattr(msg, "type") and msg.type == "human":
-            triggering_query = content if isinstance(content, str) else str(content)
-
-    if not job_id:
-        return
-
-    db_url = os.environ.get("NAT_JOB_STORE_DB_URL", "sqlite:///./data/jobs.db")
-    try:
-        from aiq_api.jobs import EventStore
-
-        events = EventStore.get_events(db_url, job_id, after_id=0, limit=5000)
-    except Exception:
-        logger.debug("Could not query event store for job %s", job_id)
-        return
-
-    report_content = None
-    for evt in reversed(events):
-        evt_data = evt.get("data", {})
-        if isinstance(evt_data, str):
-            try:
-                evt_data = json.loads(evt_data)
-            except (json.JSONDecodeError, TypeError):
-                continue
-        if (
-            evt.get("event_type") == "artifact.update"
-            and isinstance(evt_data, dict)
-            and evt_data.get("type") == "output"
-            and evt_data.get("output_category") in ("final_report", None)
-        ):
-            report_content = evt_data.get("content")
-            break
-
-    if not report_content or not isinstance(report_content, str):
-        return
-
-    version = ReportVersion(
-        conversation_id=conversation_id,
-        content=report_content,
-        triggering_query=triggering_query or "Deep research",
-    )
-    await store.append(version)
-    logger.info("Backfilled report version %s from async job %s", version.version_id, job_id)
-
 
 ########################################################
 # Intent Classifier
@@ -479,18 +404,22 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
                 logger.debug("No session context - cannot determine collection")
         except Exception as e:
             logger.warning("Could not fetch available documents: %s", e)
-        # Backfill ReportVersionStore from completed async deep research jobs.
-        # In async mode, deep_research_node returns early ("Job submitted") without
-        # storing a version. On follow-up turns, check the checkpoint for a prior
-        # job ID and reconstruct the version from the event store.
+        # Backfill ReportVersionStore from report_context sent by the frontend.
+        # In async mode, deep_research_node returns early ("Job submitted") and
+        # the report is only available on the frontend. The frontend includes
+        # report_context in follow-up messages so the backend can populate the store.
+        report_context = extract_report_context(query)
         existing_versions = await report_version_store.list(nat_context_conversation_id)
-        if not existing_versions and checkpointer is not None:
-            try:
-                await _backfill_report_version_from_events(
-                    checkpointer, nat_context_conversation_id, report_version_store
-                )
-            except Exception as e:
-                logger.debug("Report version backfill skipped: %s", e)
+        if report_context and not existing_versions:
+            from aiq_agent.common.report_version_store import ReportVersion
+
+            version = ReportVersion(
+                conversation_id=nat_context_conversation_id,
+                content=report_context,
+                triggering_query="Deep research",
+            )
+            await report_version_store.append(version)
+            logger.info("Backfilled report version %s from frontend report_context", version.version_id)
 
         # Set session-scoped source registry for citation verification across turns.
         # When no conversation ID is available, get_or_create_session_registry returns a

@@ -182,11 +182,20 @@ class ChatResearcherAgent:
                 state.available_documents,
             )
 
+            # Pass latest report content to shallow researcher for Q&A grounding
+            report_context = None
+            if self.report_version_store and state.report_version_ids:
+                conv_id = state.conversation_id or ""
+                latest = await self.report_version_store.latest(conv_id)
+                if latest:
+                    report_context = latest.content
+
             try:
                 shallow_state = ShallowResearchAgentState(
                     messages=trimmed_messages,
                     data_sources=state.data_sources,
                     available_documents=state.available_documents,
+                    report_context=report_context,
                 )
                 result = await self.shallow_research_fn(shallow_state)
             except EmptySourceRegistryError:
@@ -245,7 +254,9 @@ class ChatResearcherAgent:
 
         async def deep_research_node(state: ChatResearcherState) -> dict[str, Any]:
             trimmed_messages: list[BaseMessage] = trim_message_history(state.messages, self.max_history)
-            if self.deep_research_job_submitter is not None:
+            # Refine/edit runs synchronously so the graph can store the updated
+            # report version.  Only new full-depth research is submitted async.
+            if self.deep_research_job_submitter is not None and not state.edit_instruction:
                 job_id = await self.deep_research_job_submitter(state)
                 response = f"Deep research job submitted. Job ID: {job_id}"
                 return {"messages": [AIMessage(content=response)]}
@@ -314,11 +325,11 @@ class ChatResearcherAgent:
             return await self.report_followup.run(state, conversation_id=state.conversation_id or "")
 
         def route_after_orchestration(state: ChatResearcherState) -> str:
-            """From combined orchestration: meta -> END, report follow-up if prior report exists, else by depth."""
-            if state.user_intent and state.user_intent.intent == "meta":
-                return "END"
+            """From combined orchestration: report follow-up takes priority when a report exists."""
             if state.report_version_ids:
                 return "report_followup"
+            if state.user_intent and state.user_intent.intent == "meta":
+                return "END"
             if state.depth_decision and state.depth_decision.decision == "deep":
                 return "clarifier"
             return "shallow_research"
