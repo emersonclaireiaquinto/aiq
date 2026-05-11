@@ -66,7 +66,7 @@ async def _backfill_from_event_store(job_id: str, conversation_id: str, store) -
     try:
         from aiq_api.jobs import EventStore
 
-        events = EventStore.get_events(db_url, job_id, after_id=0, limit=5000)
+        events = await EventStore.get_events_async(db_url, job_id, after_id=0, limit=5000)
     except Exception as exc:
         logger.warning("Backfill: could not query EventStore for job %s: %s", job_id, exc)
         return
@@ -81,7 +81,8 @@ async def _backfill_from_event_store(job_id: str, conversation_id: str, store) -
                 evt_data = json.loads(evt_data)
             except (json.JSONDecodeError, TypeError):
                 continue
-        if evt.get("event_type") == "artifact.update" and isinstance(evt_data, dict):
+        evt_type = evt.get("event_type") or evt.get("type")
+        if evt_type == "artifact.update" and isinstance(evt_data, dict):
             atype = evt_data.get("type")
             ocat = evt_data.get("output_category")
             clen = len(evt_data.get("content", "")) if isinstance(evt_data.get("content"), str) else 0
