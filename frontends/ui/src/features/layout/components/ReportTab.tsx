@@ -14,14 +14,15 @@
 
 'use client'
 
-import { type FC, type ReactNode, useMemo } from 'react'
+import { type FC, type ReactNode, useMemo, lazy, Suspense } from 'react'
 import { Flex, Text } from '@/adapters/ui'
 import { Document } from '@/adapters/ui/icons'
 import { MarkdownRenderer } from '@/shared/components/MarkdownRenderer'
 import { useChatStore } from '@/features/chat'
 import { ExportFooter } from './ExportFooter'
 import { ReportVersionSelector } from './ReportVersionSelector'
-import { ReportDiffView } from './ReportDiffView'
+
+const ReportDiffView = lazy(() => import('./ReportDiffView').then((m) => ({ default: m.ReportDiffView })))
 
 interface ReportTabProps {
   /** Optional custom content to display instead of store content */
@@ -103,9 +104,11 @@ export const ReportTab: FC<ReportTabProps> = ({ children }) => {
               Report content will appear here when available.
             </Text>
           </Flex>
-        ) : reportViewMode === 'diff' && canShowDiff ? (
+        ) : reportViewMode === 'diff' && canShowDiff && parentContent ? (
           <div className="flex-1">
-            <ReportDiffView oldContent={parentContent} newContent={reportContentStr} />
+            <Suspense fallback={<Text kind="body/regular/sm" className="text-subtle">Loading diff...</Text>}>
+              <ReportDiffView oldContent={parentContent} newContent={reportContentStr} />
+            </Suspense>
           </div>
         ) : isResearchNotes ? (
           /* Research notes: preview treatment */
