@@ -420,6 +420,7 @@ class ChatResearcherAgent:
                 "shallow_result": None,  # reset at turn boundary to avoid stale checkpoint state
                 "edit_instruction": None,  # reset at turn boundary
                 "conversation_id": thread_id,
+                "report_version_ids": state.report_version_ids,
             }
             messages = state.messages
 

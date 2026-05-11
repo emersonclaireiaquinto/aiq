@@ -180,7 +180,6 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
     clearPendingInteraction,
     setLoading,
     setStreaming,
-    clearReportContent,
     createConversation: storeCreateConversation,
     setCurrentUser,
     getUserConversations,
@@ -637,9 +636,9 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
       const storeState = useChatStore.getState()
       const conversationId = storeState.currentConversation?.id
 
-      // Clear report content and pending interaction for new request
-      // Note: We do NOT clear thinkingSteps - they persist per userMessageId for chat history
-      clearReportContent()
+      // Clear pending interaction for new request
+      // Note: We do NOT clear thinkingSteps or reportContent here —
+      // reportContent persists until a NEW deep research job starts (see startDeepResearch)
       clearPendingInteraction()
 
       // Reset tracking refs
@@ -695,7 +694,6 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
       addUserMessage,
       addThinkingStep,
       addErrorCard,
-      clearReportContent,
       clearPendingInteraction,
       setCurrentStatus,
       setStreaming,
