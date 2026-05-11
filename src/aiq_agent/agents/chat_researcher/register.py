@@ -308,11 +308,33 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
         builder.get_function_config("intent_classifier").llm,
         wrapper_type=LLMFrameworkEnum.LANGCHAIN,
     )
+    # Create edit job submitter for report_followup's request_deep_research tool
+    edit_job_submitter = None
+    if deep_research_job_submitter is not None:
+
+        async def _submit_edit_job(instruction: str, conversation_id: str) -> str:
+            from aiq_api.jobs import submit_agent_job as _submit
+
+            from aiq_agent.auth import get_current_user_info
+
+            user_info = get_current_user_info()
+            owner = user_info.email if user_info and user_info.email else "anonymous"
+            return await _submit(
+                agent_type="deep_researcher",
+                input_text=instruction,
+                owner=owner,
+            )
+
+        edit_job_submitter = _submit_edit_job
+
     report_followup_node = ReportFollowup(
         llm=intent_llm,
         report_version_store=report_version_store,
+        edit_job_submitter=edit_job_submitter,
+        deep_research_fn=deep_research_fn.ainvoke,
         callbacks=callbacks,
         max_history=config.max_history,
+        max_tool_iterations=10,
     )
 
     agent = ChatResearcherAgent(

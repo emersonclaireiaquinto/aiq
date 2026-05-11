@@ -317,17 +317,23 @@ class ChatResearcherAgent:
                 logger.info("Stored report version %s", version.version_id)
             return update
 
-        async def report_followup_node(state: ChatResearcherState) -> dict[str, Any] | Command:
+        async def report_followup_node(state: ChatResearcherState) -> dict[str, Any]:
             if self.report_followup is None:
-                if state.depth_decision and state.depth_decision.decision == "deep":
-                    return Command(goto="clarifier")
-                return Command(goto="shallow_research")
+                return {"messages": [AIMessage(content="Report follow-up is not configured.")]}
             return await self.report_followup.run(state, conversation_id=state.conversation_id or "")
 
-        def route_after_orchestration(state: ChatResearcherState) -> str:
-            """From combined orchestration: report follow-up takes priority when a report exists."""
+        async def entry_router(state: ChatResearcherState) -> dict[str, Any]:
+            """No-op node for conditional entry routing."""
+            return {}
+
+        def route_entry(state: ChatResearcherState) -> str:
+            """Bypass intent_classifier entirely when a report exists."""
             if state.report_version_ids:
                 return "report_followup"
+            return "intent_classifier"
+
+        def route_after_orchestration(state: ChatResearcherState) -> str:
+            """Route after intent classification (only runs when no report exists)."""
             if state.user_intent and state.user_intent.intent == "meta":
                 return "END"
             if state.depth_decision and state.depth_decision.decision == "deep":
@@ -371,24 +377,35 @@ class ChatResearcherAgent:
 
         graph = StateGraph(ChatResearcherState)
 
+        graph.add_node("entry_router", entry_router)
         graph.add_node("intent_classifier", intent_classifier_node)
         graph.add_node("shallow_research", shallow_research_node)
         graph.add_node("clarifier", clarifier_node)
         graph.add_node("deep_research", deep_research_node)
         graph.add_node("report_followup", report_followup_node)
 
-        graph.set_entry_point("intent_classifier")
+        graph.set_entry_point("entry_router")
+
+        graph.add_conditional_edges(
+            "entry_router",
+            route_entry,
+            {
+                "report_followup": "report_followup",
+                "intent_classifier": "intent_classifier",
+            },
+        )
 
         graph.add_conditional_edges(
             "intent_classifier",
             route_after_orchestration,
             {
                 "END": END,
-                "report_followup": "report_followup",
                 "clarifier": "clarifier",
                 "shallow_research": "shallow_research",
             },
         )
+
+        graph.add_edge("report_followup", END)
 
         graph.add_conditional_edges(
             "shallow_research",
