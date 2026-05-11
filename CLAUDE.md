@@ -43,10 +43,13 @@ CI (`.github/workflows/ci.yml`) on PRs to `develop` runs ruff (check + format), 
 
 `src/aiq_agent/agents/` — one subpackage per agent, all NAT-independent classes that take dependencies via constructor:
 
-- **`chat_researcher/`** — top-level orchestrator. Builds a `StateGraph` that runs: intent classification → (meta reply) or → clarifier → shallow research → optional escalation → deep research. Calls into the other agents via injected `*_fn` callables, not direct imports of their classes.
+- **`chat_researcher/`** — top-level orchestrator. Builds a `StateGraph` with an `entry_router` that checks for existing reports:
+  - **No report** → intent classification → (meta reply) or → clarifier → shallow research → optional escalation → deep research.
+  - **Has report** (`report_version_ids` non-empty) → `report_followup` agent (tool-calling agent with `read_report`, `edit_report`, `rewrite_report`, `request_deep_research` tools). Bypasses intent classifier entirely.
+  Calls into the other agents via injected `*_fn` callables, not direct imports of their classes.
 - **`clarifier/`** — human-in-the-loop clarification + plan approval before deep research starts.
-- **`shallow_researcher/`** — bounded tool-calling researcher for fast cited answers.
-- **`deep_researcher/`** — multi-phase planning + research loops + citation management using the `deepagents` library (planner, researcher subagents, custom middleware in `custom_middleware.py`).
+- **`shallow_researcher/`** — bounded tool-calling researcher for fast cited answers. When a report exists, receives `report_context` for Q&A grounding.
+- **`deep_researcher/`** — multi-phase planning + research loops + citation management using the `deepagents` library (planner, researcher subagents, custom middleware in `custom_middleware.py`). Supports edit mode: when `prior_report` is set, seeds `/report.md` in the virtual filesystem and the orchestrator uses `edit_file`/`write_file`.
 
 Each agent directory has the same shape: `agent.py` (the framework-agnostic class), `register.py` (the NAT `@register_function` wrappers that plug into config YAML), `models/`, `prompts/`. Prompts are loaded via `aiq_agent.common.load_prompt` / `render_prompt_template` from sibling files — don't inline prompt strings.
 
@@ -74,6 +77,7 @@ A YAML in `configs/` references these by their NAT `_type` name (e.g. `_type: ch
 `src/aiq_agent/common/` is the shared layer:
 - `LLMProvider` / `LLMRole` — role-based LLM selection (`ORCHESTRATOR`, `RESEARCHER`, `PLANNER`, …) so agents request "the planner LLM" instead of a model name.
 - `get_checkpointer(db)` — returns a process-wide cached LangGraph checkpointer. SQLite for `*.db` paths, Postgres for `postgresql://` DSNs; pick via `${AIQ_CHECKPOINT_DB}` in YAML.
+- `report_version_store.py` — `ReportVersionStore` Protocol + `InMemoryReportVersionStore` for versioned report storage. Process-wide singleton via `get_report_version_store()`. Each edit creates a `ReportVersion` with `parent_version_id` linking to the previous version. Designed for future swap to SQL-backed store.
 - `citation_verification` — session-scoped `SourceRegistry` for catalog/numbering and `verify_citations` / `sanitize_report` for deep-research output. Source parsers are pluggable via `register_source_parser`.
 - `data_sources.py`, `data_source_registry.py` — the registry plumbing.
 - `tool_validation.py`, `config_validation.py` — startup-time validation that referenced tools/configs exist.
@@ -116,3 +120,22 @@ Async jobs run via Dask: local cluster auto-created by NAT in dev; for prod set 
 | `config_openai.yml` / `config_azure_openai.yml` | OpenAI / Azure OpenAI backends. |
 
 The web/server scripts validate that the chosen config has a `front_end:` block — CLI configs intentionally don't and will be rejected by `start_server_in_debug_mode.sh`.
+
+## Report follow-up & iterative editing
+
+After deep research produces a report, follow-up messages are handled by the `report_followup` tool-calling agent (`src/aiq_agent/agents/chat_researcher/nodes/report_followup.py`). The graph's `entry_router` bypasses the intent classifier when `report_version_ids` is non-empty.
+
+**Report version backfill (async mode):** In async deep research mode, the report is produced by a Dask worker. On the next follow-up, `_run()` in `register.py` queries the EventStore for the `final_report` artifact and backfills the `ReportVersionStore`. Job IDs are tracked in the process-local `_pending_deep_research_jobs` dict.
+
+**Edited report sync to frontend:** When `edit_report`/`rewrite_report` tools modify the report, `_run()` embeds the updated `report_version` as JSON in the response. The frontend's WebSocket `onResponse` handler detects this, updates `reportContent` and `reportVersions`.
+
+**Deep research auto-integration:** When `request_deep_research` is called from the followup agent, the frontend marks it as `isFollowupDeepResearch`. On job completion, the frontend auto-sends a system message with the research result, triggering the followup agent to integrate it via edit tools.
+
+### Known technical debt (TODO: move to backend)
+
+Several pieces of logic currently live on the frontend that should be backend-side:
+
+1. **Report version backfill** — relies on `_pending_deep_research_jobs` (process-local dict, lost on restart). Should move to persistent storage (SQL-backed `ReportVersionStore`).
+2. **Deep research auto-integration** — the frontend orchestrates feeding deep research results back to the followup agent. If the user closes the tab, the integration is lost. Should be a backend job completion callback.
+3. **Report version persistence** — `reportVersions` is stored in localStorage. Should be persisted server-side so versions survive across devices/sessions.
+4. **Report content source of truth** — `reportContent` (SSE stream) and `reportVersions` (edit tools) are two separate sources. The frontend resolves them with a priority fallback. A single backend-authoritative source would be cleaner.
