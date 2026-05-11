@@ -1130,6 +1130,36 @@ async def _sse_generator_postgres(job_store, job_id: str, db_url: str, start_eve
 
                     if job.status != last_status:
                         last_status = job.status
+
+                        if job.status in terminal_statuses:
+                            # Drain remaining artifact events BEFORE emitting
+                            # terminal status so the frontend receives all data
+                            # (e.g. final_report) before it closes the EventSource.
+                            await asyncio.sleep(0.5)
+                            while not notification_queue.empty():
+                                try:
+                                    drain_payload = notification_queue.get_nowait()
+                                    drain_data = json.loads(drain_payload)
+                                    drain_event_id = drain_data.get("id")
+                                    if drain_event_id and drain_event_id > last_event_id:
+                                        drain_event = await EventStore.get_event_by_id_async(db_url, drain_event_id)
+                                        if drain_event:
+                                            last_event_id = drain_event_id
+                                            db_event_id = drain_event.pop("_id", None)
+                                            event_type = drain_event.pop("type", "event")
+                                            yield format_sse(event_type, drain_event, db_event_id)
+                                except asyncio.QueueEmpty:
+                                    break
+
+                            # Also fetch any events that arrived without a notification
+                            final_events = await EventStore.get_events_async(db_url, job_id, last_event_id, 1000)
+                            for fe in final_events:
+                                db_event_id = fe.pop("_id", None)
+                                if db_event_id:
+                                    last_event_id = db_event_id
+                                fe_type = fe.pop("type", "event")
+                                yield format_sse(fe_type, fe, db_event_id)
+
                         logger.info(f"SSE pub-sub: Job {job_id} status changed to {job.status}")
                         data = {"status": job.status}
                         if job.error:
@@ -1140,21 +1170,6 @@ async def _sse_generator_postgres(job_store, job_id: str, db_url: str, start_eve
                         yield format_sse("job.status", data)
 
                     if job.status in terminal_statuses:
-                        await asyncio.sleep(0.5)
-                        while not notification_queue.empty():
-                            try:
-                                payload = notification_queue.get_nowait()
-                                notification_data = json.loads(payload)
-                                event_id = notification_data.get("id")
-                                if event_id and event_id > last_event_id:
-                                    event = await EventStore.get_event_by_id_async(db_url, event_id)
-                                    if event:
-                                        last_event_id = event_id
-                                        db_event_id = event.pop("_id", None)
-                                        event_type = event.pop("type", "event")
-                                        yield format_sse(event_type, event, db_event_id)
-                            except asyncio.QueueEmpty:
-                                break
                         break
 
                 except asyncio.CancelledError:
