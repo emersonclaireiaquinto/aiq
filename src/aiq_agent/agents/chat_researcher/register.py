@@ -62,13 +62,16 @@ async def _backfill_from_event_store(job_id: str, conversation_id: str, store) -
     from aiq_agent.common.report_version_store import ReportVersion
 
     db_url = os.environ.get("NAT_JOB_STORE_DB_URL", "sqlite:///./data/jobs.db")
+    logger.info("Backfill: querying EventStore for job %s (db_url=%s)", job_id, db_url)
     try:
         from aiq_api.jobs import EventStore
 
         events = EventStore.get_events(db_url, job_id, after_id=0, limit=5000)
-    except Exception:
-        logger.debug("Could not query EventStore for job %s (db_url=%s)", job_id, db_url)
+    except Exception as exc:
+        logger.warning("Backfill: could not query EventStore for job %s: %s", job_id, exc)
         return
+
+    logger.info("Backfill: found %d events for job %s", len(events), job_id)
 
     report_content = None
     for evt in reversed(events):
@@ -78,19 +81,17 @@ async def _backfill_from_event_store(job_id: str, conversation_id: str, store) -
                 evt_data = json.loads(evt_data)
             except (json.JSONDecodeError, TypeError):
                 continue
-        if (
-            evt.get("event_type") == "artifact.update"
-            and isinstance(evt_data, dict)
-            and evt_data.get("type") == "output"
-            and evt_data.get("output_category") in ("final_report", None)
-        ):
-            content = evt_data.get("content")
-            if isinstance(content, str) and len(content) > 200:
-                report_content = content
+        if evt.get("event_type") == "artifact.update" and isinstance(evt_data, dict):
+            atype = evt_data.get("type")
+            ocat = evt_data.get("output_category")
+            clen = len(evt_data.get("content", "")) if isinstance(evt_data.get("content"), str) else 0
+            if atype == "output" and ocat in ("final_report", None) and clen > 200:
+                report_content = evt_data["content"]
+                logger.info("Backfill: found report artifact (output_category=%s, %d chars)", ocat, clen)
                 break
 
     if not report_content:
-        logger.debug("No final_report artifact found in EventStore for job %s", job_id)
+        logger.warning("Backfill: no final_report artifact found in %d events for job %s", len(events), job_id)
         return
 
     version = ReportVersion(
