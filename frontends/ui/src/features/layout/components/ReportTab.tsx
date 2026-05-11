@@ -73,7 +73,7 @@ export const ReportTab: FC<ReportTabProps> = ({ children }) => {
 
   return (
     <Flex direction="col" className="h-full">
-      <ReportVersionSelector />
+      {/* <ReportVersionSelector /> */}
 
       {canShowDiff && !isEmpty && !isResearchNotes && (
         <Flex align="center" gap="1" className="shrink-0 mb-3">
