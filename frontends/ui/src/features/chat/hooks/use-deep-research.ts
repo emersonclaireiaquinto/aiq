@@ -318,6 +318,7 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
                 setFollowupDeepResearch(false)
               } else if (isFollowupDeepResearch) {
                 console.warn(`[deep-research] Followup job ${jobId} completed but report is empty — skipping auto-integration`)
+                setFollowupDeepResearch(false)
               }
 
               if (ownerConvId && messageId) {

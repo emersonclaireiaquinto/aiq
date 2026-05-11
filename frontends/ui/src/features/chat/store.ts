@@ -553,6 +553,8 @@ export const useChatStore = create<ChatStore>()(
                 reportContent: '',
                 reportContentCategory: null,
                 selectedReportVersionId: convVersions.length > 0 ? convVersions[convVersions.length - 1].versionId : null,
+                isFollowupDeepResearch: false,
+                pendingReportIntegration: null,
               },
               false,
               'selectConversation'
