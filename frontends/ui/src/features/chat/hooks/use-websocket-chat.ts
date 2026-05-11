@@ -254,12 +254,14 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
               const convVersions = useChatStore.getState().currentConversation?.reportVersions ?? []
 
               // If the parent version doesn't exist locally but parent content is provided,
-              // backfill it so the diff tab can show before/after comparison
+              // backfill it so the diff tab can show before/after comparison.
+              // Skip if versions already exist — the initial report is likely there
+              // under a frontend-generated ID that differs from the backend's ID.
               if (parsed.report_version.parentVersionId && parsed.report_version.parentContent) {
                 const parentExists = convVersions.some(
                   (v: { versionId: string }) => v.versionId === parsed.report_version.parentVersionId
                 )
-                if (!parentExists) {
+                if (!parentExists && convVersions.length === 0) {
                   addReportVersion({
                     versionId: parsed.report_version.parentVersionId,
                     parentVersionId: null,
@@ -883,6 +885,15 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
     const trySend = () => {
       if (cancelled) return
       attempt++
+
+      // If the user already sent a message (streaming in progress), skip —
+      // their message supersedes the auto-integration.
+      const { isStreaming: alreadyStreaming } = useChatStore.getState()
+      if (alreadyStreaming) {
+        console.info(`[auto-integration] Skipping for job ${jobId} — user message already streaming`)
+        useChatStore.getState().setPendingReportIntegration(null)
+        return
+      }
 
       if (wsClientRef.current?.isConnected()) {
         console.info(`[auto-integration] Sending integration message for job ${jobId} (attempt ${attempt})`)
