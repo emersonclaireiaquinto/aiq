@@ -380,6 +380,11 @@ export const useChatStore = create<ChatStore>()(
               deepResearchToolCalls: [],
               deepResearchFiles: [],
               deepResearchStreamLoaded: false,
+              // Clear report versions for new conversation
+              reportVersions: [],
+              selectedReportVersionId: null,
+              isFollowupDeepResearch: false,
+              pendingReportIntegration: null,
               // Clear deep research job state for new conversation
               deepResearchJobId: null,
               deepResearchLastEventId: null,

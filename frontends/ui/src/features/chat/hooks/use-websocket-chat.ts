@@ -280,8 +280,11 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
           const currentPlanMessages = state.planMessages
           const currentConversation = state.currentConversation
 
-          // Mark as followup deep research if a report already exists
-          if (state.reportVersions.length > 0) {
+          // Mark as followup if this conversation already has a completed deep research
+          const hasCompletedResearch = currentConversation?.messages?.some(
+            (m) => m.deepResearchBannerData?.bannerType === 'success'
+          )
+          if (hasCompletedResearch) {
             state.setFollowupDeepResearch(true)
           }
 
@@ -847,15 +850,22 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
     const integrationMessage = [
       `[SYSTEM: Deep research job ${jobId} completed. Below is the researched content.`,
       'Integrate this into the existing report using edit_report or rewrite_report.',
-      'Do not respond conversationally — just make the edits.]\n',
+      'Do not respond conversationally — just make the edits.]',
+      '',
       truncated,
-    ].join(' ')
+    ].join('\n')
 
-    // Small delay to let the UI settle after deep research completion
+    // Send directly via WebSocket without adding a visible user message.
+    // Set streaming state so the UI shows a loading indicator.
     setTimeout(() => {
-      sendMessage(integrationMessage)
-    }, 1500)
-  }, [pendingReportIntegration, sendMessage])
+      if (wsClientRef.current?.isConnected()) {
+        setCurrentStatus('thinking')
+        setStreaming(true)
+        const layoutState = useLayoutStore.getState()
+        wsClientRef.current.sendMessage(integrationMessage, [...layoutState.enabledDataSourceIds])
+      }
+    }, 2000)
+  }, [pendingReportIntegration])
 
   // Get user's filtered conversations
   const userConversations = getUserConversations()
