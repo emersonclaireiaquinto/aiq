@@ -362,6 +362,15 @@ export interface DeepResearchFile {
   timestamp: Date
 }
 
+/** Report version from iterative research updates */
+export interface ReportVersion {
+  versionId: string
+  parentVersionId: string | null
+  content: string
+  triggeringQuery: string
+  createdAt: Date
+}
+
 /** Chat state for Zustand store */
 export interface ChatState {
   /** Current authenticated user ID - used for filtering sessions */
@@ -422,6 +431,14 @@ export interface ChatState {
   // Plan state (for PlanTab in ResearchPanel)
   /** Messages for the PlanTab (clarification questions, plan preview, etc.) */
   planMessages: PlanMessage[]
+
+  // Report versioning state
+  /** All report versions for the current conversation (oldest → newest) */
+  reportVersions: ReportVersion[]
+  /** Currently selected report version ID (null = latest) */
+  selectedReportVersionId: string | null
+  /** View mode for report display */
+  reportViewMode: 'latest' | 'diff'
 }
 
 /** Chat actions for Zustand store */
@@ -649,6 +666,15 @@ export interface ChatActions {
 
   /** Restore ephemeral state (thinkingSteps, reportContent, citations) from a conversation's messages */
   restoreSessionState: (conversation: Conversation) => void
+
+  // Report versioning actions
+
+  /** Add a new report version (auto-selects the newest) */
+  addReportVersion: (version: ReportVersion) => void
+  /** Select a specific report version for display */
+  selectReportVersion: (versionId: string | null) => void
+  /** Set report view mode (latest = rendered markdown, diff = inline diff vs parent) */
+  setReportViewMode: (mode: 'latest' | 'diff') => void
 
   // Session busy checks (for disabling UI controls)
 

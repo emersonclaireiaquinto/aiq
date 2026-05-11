@@ -126,7 +126,7 @@ class ChatDeepResearcherConfig(FunctionBaseConfig, name="chat_deepresearcher_age
 
     enable_escalation: bool = Field(default=False, description="Enable escalation from shallow to deep research")
     max_history: int = Field(
-        default=20, description="Maximum number of messages to keep in history before invoking the agent"
+        default=50, description="Maximum number of messages to keep in history before invoking the agent"
     )
     verbose: bool = Field(default=False, description="Enable verbose logging")
     enable_clarifier: bool = Field(default=False, description="Enable clarification of research queries")
@@ -296,6 +296,25 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
 
     checkpointer = await get_checkpointer(config.checkpoint_db)
 
+    # Report version store + follow-up node
+    from aiq_agent.common.report_version_store import get_report_version_store
+
+    from .nodes.report_followup import ReportFollowup
+
+    report_version_store = get_report_version_store()
+
+    # Use the intent classifier LLM for the report follow-up classifier
+    intent_llm = await builder.get_llm(
+        builder.get_function_config("intent_classifier").llm,
+        wrapper_type=LLMFrameworkEnum.LANGCHAIN,
+    )
+    report_followup_node = ReportFollowup(
+        llm=intent_llm,
+        report_version_store=report_version_store,
+        callbacks=callbacks,
+        max_history=config.max_history,
+    )
+
     agent = ChatResearcherAgent(
         intent_classifier_fn=intent_classifier_fn.ainvoke,
         shallow_research_fn=shallow_research_fn.ainvoke,
@@ -308,6 +327,8 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
         deep_research_job_submitter=deep_research_job_submitter,
         checkpointer=checkpointer,
         validate_deep_research_tools_fn=validate_deep_research_tools,
+        report_followup=report_followup_node,
+        report_version_store=report_version_store,
     )
 
     async def _run(query: object) -> ChatResponse:

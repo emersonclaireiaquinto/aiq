@@ -21,6 +21,7 @@ from typing import Any
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel
+from pydantic import Field
 
 from aiq_agent.knowledge import AvailableDocument
 
@@ -40,11 +41,14 @@ class ChatResearcherState(BaseModel):
         data_sources: Optional list of user-selected data source IDs.
         user_intent: Result of intent classification.
         depth_decision: Result of depth routing.
-        final_report: The final research report.
+        final_report: The final research report (unused — kept for back-compat;
+            report content lives in the ReportVersionStore).
         shallow_result: Result from shallow research (if executed).
         clarifier_result: Log from clarifier agent dialog.
         original_query: The latest user query, preserved for deep research.
         available_documents: User-uploaded documents with summaries for context.
+        report_version_ids: Ordered list of ReportVersion.version_id values
+            (oldest → newest). Content is resolved via the ReportVersionStore.
     """
 
     messages: Annotated[list[AnyMessage], add_messages]
@@ -57,3 +61,6 @@ class ChatResearcherState(BaseModel):
     clarifier_result: str | None = None
     original_query: str | None = None
     available_documents: list[AvailableDocument] | None = None
+    report_version_ids: list[str] = Field(default_factory=list)
+    edit_instruction: str | None = None
+    conversation_id: str | None = None

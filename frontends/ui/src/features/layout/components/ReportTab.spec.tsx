@@ -2,16 +2,26 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { render, screen } from '@/test-utils'
-import { vi, describe, test, expect } from 'vitest'
+import { vi, describe, test, expect, beforeEach } from 'vitest'
 import { ReportTab } from './ReportTab'
+
+let mockStoreState: Record<string, unknown> = {
+  reportContent: '',
+  reportContentCategory: null,
+  isStreaming: false,
+  currentStatus: null,
+  reportVersions: [],
+  selectedReportVersionId: null,
+  reportViewMode: 'latest' as const,
+  setReportViewMode: vi.fn(),
+}
 
 // Mock the chat store
 vi.mock('@/features/chat', () => ({
-  useChatStore: vi.fn(() => ({
-    reportContent: '',
-    isStreaming: false,
-    currentStatus: null,
-  })),
+  useChatStore: vi.fn((selector?: (s: Record<string, unknown>) => unknown) => {
+    if (selector) return selector(mockStoreState)
+    return mockStoreState
+  }),
 }))
 
 // Mock MarkdownRenderer
@@ -29,23 +39,39 @@ vi.mock('./ExportFooter', () => ({
   ExportFooter: () => <div data-testid="export-footer">Export Footer</div>,
 }))
 
-import { useChatStore } from '@/features/chat'
+// Mock ReportVersionSelector
+vi.mock('./ReportVersionSelector', () => ({
+  ReportVersionSelector: () => null,
+}))
+
+// Mock ReportDiffView
+vi.mock('./ReportDiffView', () => ({
+  ReportDiffView: () => <div data-testid="diff-view">Diff View</div>,
+}))
 
 describe('ReportTab', () => {
+  beforeEach(() => {
+    mockStoreState = {
+      reportContent: '',
+      reportContentCategory: null,
+      isStreaming: false,
+      currentStatus: null,
+      reportVersions: [],
+      selectedReportVersionId: null,
+      reportViewMode: 'latest' as const,
+      setReportViewMode: vi.fn(),
+    }
+  })
+
   test('displays empty state when no report content', () => {
     render(<ReportTab />)
 
     expect(screen.getByText(/report content will appear here/i)).toBeInTheDocument()
-    // Icon is rendered as SVG, verify by checking the document icon is present
     expect(document.querySelector('svg')).toBeInTheDocument()
   })
 
   test('renders report content via MarkdownRenderer', () => {
-    vi.mocked(useChatStore).mockReturnValue({
-      reportContent: '# Report Title\n\nReport content here',
-      isStreaming: false,
-      currentStatus: null,
-    } as ReturnType<typeof useChatStore>)
+    mockStoreState.reportContent = '# Report Title\n\nReport content here'
 
     render(<ReportTab />)
 
@@ -53,11 +79,7 @@ describe('ReportTab', () => {
   })
 
   test('renders title when provided', () => {
-    vi.mocked(useChatStore).mockReturnValue({
-      reportContent: 'Some content',
-      isStreaming: false,
-      currentStatus: null,
-    } as ReturnType<typeof useChatStore>)
+    mockStoreState.reportContent = 'Some content'
 
     render(<ReportTab />)
 
@@ -65,15 +87,12 @@ describe('ReportTab', () => {
   })
 
   test('shows generating indicator when streaming and writing', () => {
-    vi.mocked(useChatStore).mockReturnValue({
-      reportContent: 'Partial content...',
-      isStreaming: true,
-      currentStatus: 'writing',
-    } as ReturnType<typeof useChatStore>)
+    mockStoreState.reportContent = 'Partial content...'
+    mockStoreState.isStreaming = true
+    mockStoreState.currentStatus = 'writing'
 
     render(<ReportTab />)
 
-    // Check that MarkdownRenderer receives isStreaming prop and shows indicator
     expect(screen.getByTestId('streaming-indicator')).toBeInTheDocument()
     expect(screen.getByText('Generating report...')).toBeInTheDocument()
   })

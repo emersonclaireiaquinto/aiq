@@ -242,12 +242,15 @@ class DeepResearcherAgent:
             )
 
         available_docs = [doc.model_dump() for doc in (state.available_documents or [])]
+        edit_mode = state.prior_report is not None
         orchestrator_instructions = render_prompt_template(
             self._prompts["orchestrator"],
             current_datetime=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             clarifier_result=state.clarifier_result,
             available_documents=available_docs,
             tools=self.tools_info,
+            edit_mode=edit_mode,
+            edit_instruction=state.edit_instruction or "",
         )
 
         agent = create_deep_agent(
@@ -364,6 +367,13 @@ class DeepResearcherAgent:
         """
         Execute deep research with multi-phase workflow.
         """
+        edit_mode = state.prior_report is not None
+
+        # Seed the virtual filesystem with the prior report when in edit mode
+        # so the orchestrator can use read_file/edit_file/write_file on /report.md.
+        if edit_mode:
+            state = state.model_copy(update={"files": {"/report.md": state.prior_report, **state.files}})
+            logger.info("Edit mode: seeded /report.md (%d chars)", len(state.prior_report))
 
         agent = self._build_orchestrator_agent(state)
 

@@ -90,29 +90,10 @@ export const InputArea: FC<InputAreaProps> = ({
     )
   })
 
-  // Check for completed deep research in conversation messages (persisted state)
-  // This handles the case where ephemeral state has been reset (page refresh, session switch)
-  const hasCompletedDeepResearch = useChatStore((state) => {
-    if (!state.currentConversation?.messages) return false
-    return state.currentConversation.messages.some(
-      (m) =>
-        m.messageType === 'agent_response' &&
-        m.deepResearchJobId &&
-        (m.deepResearchJobStatus === 'success' ||
-          m.deepResearchJobStatus === 'failure' ||
-          m.deepResearchJobStatus === 'interrupted')
-    )
-  })
-
-  // Research session is complete when:
-  // 1. Ephemeral state shows terminal status AND stream has finished, OR
-  // 2. Persisted message has terminal deep research job status
-  const isResearchSessionComplete =
-    (!isDeepResearchStreaming &&
-      (deepResearchStatus === 'success' ||
-        deepResearchStatus === 'failure' ||
-        deepResearchStatus === 'interrupted')) ||
-    hasCompletedDeepResearch
+  // Research session complete is no longer used to block input — users can send
+  // follow-up messages after a report is generated (Q&A, refine, new topic).
+  // We still track it for UI hints (e.g. placeholder text).
+  const isResearchSessionComplete = false
 
   // Research session is in progress when:
   // 1. Ephemeral state is streaming, OR
@@ -213,8 +194,6 @@ export const InputArea: FC<InputAreaProps> = ({
   // see the response prompt even when the session is "busy" due to HITL.
   const getPlaceholder = (): string => {
     if (!isAuthenticated) return 'Sign in to start researching'
-    if (isResearchSessionComplete)
-      return 'Research completed. Create a new session for further questions.'
     if (isResponseMode) return 'Type your response to the agent...'
     if (isBusy) return 'Please wait...'
     return placeholder
@@ -481,29 +460,10 @@ export const InputArea: FC<InputAreaProps> = ({
               <Paperclip className="h-4 w-4" />
             </Button>
 
-            {/* Send button - wrapped in Popover when research session is complete/in-progress.
+            {/* Send button - wrapped in Popover when research is in-progress.
                 Exception: isResponseMode always shows the normal send button so users can
                 submit HITL responses (approve/reject) even during active research. */}
-            {isResearchSessionComplete && !isResponseMode ? (
-              <Popover
-                side="top"
-                align="end"
-                slotContent={
-                  <Text kind="body/regular/sm" className="max-w-xs p-3">
-                    Research completed. For further questions or reports, please create a new session.
-                  </Text>
-                }
-              >
-                <Button
-                  kind="primary"
-                  size="small"
-                  aria-label="Research completed - create new session"
-                  title="Research completed"
-                >
-                  <Paperplane className="h-4 w-4" />
-                </Button>
-              </Popover>
-            ) : isResearchSessionInProgress && !isResponseMode ? (
+            {isResearchSessionInProgress && !isResponseMode ? (
               <Popover
                 side="top"
                 align="end"

@@ -289,10 +289,23 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
 
             if (status === 'success') {
               setCurrentStatus('complete')
-              const { reportContent: currentReport, deepResearchLLMSteps, deepResearchToolCalls } = state
+              const { reportContent: currentReport, deepResearchLLMSteps, deepResearchToolCalls, reportVersions, addReportVersion } = state
               const totalTokens = deepResearchLLMSteps.reduce((sum, step) => sum + (step.usage?.input_tokens || 0) + (step.usage?.output_tokens || 0), 0)
               const toolCallCount = deepResearchToolCalls.length
               const hasReport = Boolean(currentReport?.trim())
+
+              if (hasReport && currentReport) {
+                const conv = state.currentConversation
+                const lastUserMsg = conv?.messages?.filter(m => m.role === 'user').pop()
+                const prevVersion = reportVersions.length > 0 ? reportVersions[reportVersions.length - 1] : null
+                addReportVersion({
+                  versionId: `rv-${Date.now().toString(36)}`,
+                  parentVersionId: prevVersion?.versionId ?? null,
+                  content: currentReport,
+                  triggeringQuery: lastUserMsg?.content ?? 'Deep research',
+                  createdAt: new Date(),
+                })
+              }
 
               if (ownerConvId && messageId) {
                 patchConversationMessage(ownerConvId, messageId, {

@@ -197,6 +197,10 @@ const initialState: ChatState = {
   deepResearchStreamLoaded: false,
   // State for PlanTab
   planMessages: [],
+  // Report versioning
+  reportVersions: [],
+  selectedReportVersionId: null,
+  reportViewMode: 'latest' as const,
 }
 
 /**
@@ -2624,6 +2628,33 @@ export const useChatStore = create<ChatStore>()(
               )
             }
           }
+        },
+
+        // ============================================================
+        // Report versioning
+        // ============================================================
+
+        addReportVersion: (version) => {
+          const state = get()
+          const existing = state.reportVersions.find((v) => v.versionId === version.versionId)
+          if (existing) return
+          set(
+            {
+              reportVersions: [...state.reportVersions, version],
+              selectedReportVersionId: version.versionId,
+              reportViewMode: 'latest',
+            },
+            false,
+            'addReportVersion'
+          )
+        },
+
+        selectReportVersion: (versionId) => {
+          set({ selectedReportVersionId: versionId, reportViewMode: 'latest' }, false, 'selectReportVersion')
+        },
+
+        setReportViewMode: (mode) => {
+          set({ reportViewMode: mode }, false, 'setReportViewMode')
         },
 
         // ============================================================

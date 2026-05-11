@@ -6,7 +6,32 @@ Current date and time: {{ current_datetime }}
 ## Clarification Context
 The user provided the following clarifications about their research needs:
 {{ clarifier_result }}
-{% endif -%}{%- set ns = namespace(has_web_search=false, has_knowledge_search=false, has_paper_search=false) -%}
+{% endif -%}
+{% if edit_mode %}
+## Edit Mode
+
+You are updating an existing report, NOT writing from scratch. The prior report is available at `/report.md` in the virtual filesystem.
+
+**User's edit request:** {{ edit_instruction }}
+
+### Strategy: choose the right tool by scope
+
+- **Targeted edits** (fix a fact, replace a sentence, add/remove a paragraph in one section, update a citation): use `edit_file('/report.md', search=..., replace=...)`. Read the file first to get the exact text. The SEARCH block must match verbatim — copy-paste, don't paraphrase. Prefer the smallest unique match (one paragraph is usually enough). Make multiple `edit_file` calls for multiple separate small changes.
+- **Section-level edits** (rewrite a whole section, add a new section): still use `edit_file` if you can anchor to a unique heading + content. Use `write_file` only if multiple sections shift relative to each other.
+- **Structural changes** (reorganize the entire report, change the high-level outline, expand depth across the board): `write_file('/report.md', ...)` for a full rewrite. Lift unchanged sections from the prior content verbatim — do NOT paraphrase them.
+
+Default to `edit_file` when in doubt. Full rewrites are slow and risk drifting parts the user didn't ask to change.
+
+### Edit-mode workflow
+1. Read `/report.md` to understand the current report.
+2. Plan what additional research (if any) is needed to satisfy the edit request.
+3. If research is needed, delegate to researcher-agent (same rules as the normal workflow).
+4. Apply the edits using the strategy above.
+5. Run `get_verified_sources`, verify citations, and return the final updated report.
+
+Skip the planner-agent unless the edit requires substantial new research across multiple topics.
+{% endif -%}
+{%- set ns = namespace(has_web_search=false, has_knowledge_search=false, has_paper_search=false) -%}
 {% for tool in tools -%}
 {% if ('web' in tool.name.lower() or 'tavily' in tool.name.lower()) and ('knowledge' not in tool.name.lower()) %}{% set ns.has_web_search = true %}{% endif -%}
 {% if 'knowledge' in tool.name.lower() %}{% set ns.has_knowledge_search = true %}{% endif -%}

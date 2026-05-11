@@ -66,3 +66,5 @@ class DeepResearchAgentState(BaseModel):
     subagents: list[dict[str, Any]] = Field(default_factory=list)
     clarifier_result: str | None = None
     available_documents: list[AvailableDocument] | None = None
+    prior_report: str | None = None
+    edit_instruction: str | None = None

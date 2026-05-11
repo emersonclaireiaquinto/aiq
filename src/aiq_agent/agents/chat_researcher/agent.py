@@ -45,9 +45,12 @@ from aiq_agent.agents.deep_researcher.models import DeepResearchAgentState
 from aiq_agent.agents.shallow_researcher.models import ShallowResearchAgentState
 from aiq_agent.common import get_latest_user_query
 from aiq_agent.common.citation_verification import EmptySourceRegistryError
+from aiq_agent.common.report_version_store import ReportVersion
+from aiq_agent.common.report_version_store import ReportVersionStore
 
 from .models import ChatResearcherState
 from .models import ShallowResult
+from .nodes.report_followup import ReportFollowup
 from .utils import trim_message_history
 
 logger = logging.getLogger(__name__)
@@ -85,22 +88,9 @@ class ChatResearcherAgent:
         deep_research_job_submitter: Callable[[Any], Awaitable[str]] | None = None,
         checkpointer: BaseCheckpointSaver | None = None,
         validate_deep_research_tools_fn: Callable[[list[str] | None], tuple[bool, str]] | None = None,
+        report_followup: ReportFollowup | None = None,
+        report_version_store: ReportVersionStore | None = None,
     ) -> None:
-        """
-        Initialize the chat researcher agent.
-
-        Args:
-            intent_classifier_fn: Combined orchestration (intent + meta response + depth in one node)
-            shallow_research_fn: Function for shallow research
-            deep_research_fn: Function for deep research
-            clarifier_fn: Function for clarification
-            enable_clarifier: Whether to enable clarification
-            enable_escalation: Whether to escalate shallow to deep on low confidence
-            callbacks: Optional list of callback handlers
-            max_history: Maximum number of messages to keep in history
-            deep_research_job_submitter: Optional function to submit deep research as async job
-            checkpointer: Optional checkpointer for persistent state (defaults to MemorySaver)
-        """
         self.intent_classifier_fn = intent_classifier_fn
         self.shallow_research_fn = shallow_research_fn
         self.deep_research_fn = deep_research_fn
@@ -112,6 +102,8 @@ class ChatResearcherAgent:
         self.deep_research_job_submitter = deep_research_job_submitter
         self.checkpointer = checkpointer
         self.validate_deep_research_tools_fn = validate_deep_research_tools_fn
+        self.report_followup = report_followup
+        self.report_version_store = report_version_store
 
         self._graph = self._build_graph()
 
@@ -259,11 +251,23 @@ class ChatResearcherAgent:
                 return {"messages": [AIMessage(content=response)]}
 
             research_query = state.original_query or get_latest_user_query(state.messages)
+
+            # Resolve prior report for edit mode
+            prior_report = None
+            edit_instruction = state.edit_instruction
+            if edit_instruction and self.report_version_store and state.report_version_ids:
+                conv_id = state.conversation_id or ""
+                latest = await self.report_version_store.latest(conv_id)
+                if latest:
+                    prior_report = latest.content
+
             deep_state = DeepResearchAgentState(
                 messages=trimmed_messages + [HumanMessage(content=research_query)],
                 data_sources=state.data_sources,
                 clarifier_result=state.clarifier_result,
                 available_documents=state.available_documents,
+                prior_report=prior_report,
+                edit_instruction=edit_instruction,
             )
             try:
                 result = await self.deep_research_fn(deep_state)
@@ -280,13 +284,41 @@ class ChatResearcherAgent:
                 logger.error(error_message)
                 final_message = AIMessage(content=error_message)
                 return {"messages": [final_message]}
-            else:
-                return {"messages": [result.messages[-1]]}
+
+            # Store the new report version
+            report_content = result.messages[-1].content
+            if isinstance(report_content, list):
+                report_content = " ".join(
+                    p.get("text", "") for p in report_content if isinstance(p, dict) and p.get("type") == "text"
+                )
+            update: dict[str, Any] = {"messages": [result.messages[-1]]}
+            if self.report_version_store and state.conversation_id and isinstance(report_content, str):
+                parent_id = state.report_version_ids[-1] if state.report_version_ids else None
+                version = ReportVersion(
+                    conversation_id=state.conversation_id,
+                    content=report_content,
+                    triggering_query=research_query,
+                    parent_version_id=parent_id,
+                )
+                await self.report_version_store.append(version)
+                update["report_version_ids"] = [version.version_id]
+                update["edit_instruction"] = None
+                logger.info("Stored report version %s", version.version_id)
+            return update
+
+        async def report_followup_node(state: ChatResearcherState) -> dict[str, Any] | Command:
+            if self.report_followup is None:
+                if state.depth_decision and state.depth_decision.decision == "deep":
+                    return Command(goto="clarifier")
+                return Command(goto="shallow_research")
+            return await self.report_followup.run(state, conversation_id=state.conversation_id or "")
 
         def route_after_orchestration(state: ChatResearcherState) -> str:
-            """From combined orchestration: meta -> END (response already in messages), else by depth."""
+            """From combined orchestration: meta -> END, report follow-up if prior report exists, else by depth."""
             if state.user_intent and state.user_intent.intent == "meta":
                 return "END"
+            if state.report_version_ids:
+                return "report_followup"
             if state.depth_decision and state.depth_decision.decision == "deep":
                 return "clarifier"
             return "shallow_research"
@@ -332,6 +364,7 @@ class ChatResearcherAgent:
         graph.add_node("shallow_research", shallow_research_node)
         graph.add_node("clarifier", clarifier_node)
         graph.add_node("deep_research", deep_research_node)
+        graph.add_node("report_followup", report_followup_node)
 
         graph.set_entry_point("intent_classifier")
 
@@ -340,6 +373,7 @@ class ChatResearcherAgent:
             route_after_orchestration,
             {
                 "END": END,
+                "report_followup": "report_followup",
                 "clarifier": "clarifier",
                 "shallow_research": "shallow_research",
             },
@@ -375,6 +409,7 @@ class ChatResearcherAgent:
 
         if isinstance(state, dict):
             input_state = state
+            input_state.setdefault("conversation_id", thread_id)
             messages = state.get("messages", [])
         else:
             input_state = {
@@ -383,6 +418,8 @@ class ChatResearcherAgent:
                 "data_sources": state.data_sources,
                 "available_documents": state.available_documents,
                 "shallow_result": None,  # reset at turn boundary to avoid stale checkpoint state
+                "edit_instruction": None,  # reset at turn boundary
+                "conversation_id": thread_id,
             }
             messages = state.messages
 

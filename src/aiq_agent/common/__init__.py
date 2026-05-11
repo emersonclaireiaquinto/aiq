@@ -56,6 +56,10 @@ from .llm_provider import LLMRole
 from .message_utils import get_latest_user_query
 from .prompt_utils import load_prompt
 from .prompt_utils import render_prompt_template
+from .report_version_store import InMemoryReportVersionStore
+from .report_version_store import ReportVersion
+from .report_version_store import ReportVersionStore
+from .report_version_store import get_report_version_store
 from .tool_validation import format_tool_unavailability_error
 from .tool_validation import validate_tool_availability
 
@@ -79,11 +83,15 @@ __all__ = [
     "get_all_tool_refs",
     "get_checkpointer",
     "get_or_create_session_registry",
+    "get_report_version_store",
     "get_source_id_for_tool",
     "get_session_registry",
     "get_latest_user_query",
+    "InMemoryReportVersionStore",
     "is_postgres_dsn",
     "load_prompt",
+    "ReportVersion",
+    "ReportVersionStore",
     "parse_data_sources",
     "register_source_parser",
     "render_prompt_template",

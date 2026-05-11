@@ -14,12 +14,14 @@
 
 'use client'
 
-import { type FC, type ReactNode } from 'react'
+import { type FC, type ReactNode, useMemo } from 'react'
 import { Flex, Text } from '@/adapters/ui'
 import { Document } from '@/adapters/ui/icons'
 import { MarkdownRenderer } from '@/shared/components/MarkdownRenderer'
 import { useChatStore } from '@/features/chat'
 import { ExportFooter } from './ExportFooter'
+import { ReportVersionSelector } from './ReportVersionSelector'
+import { ReportDiffView } from './ReportDiffView'
 
 interface ReportTabProps {
   /** Optional custom content to display instead of store content */
@@ -33,14 +35,63 @@ interface ReportTabProps {
  */
 export const ReportTab: FC<ReportTabProps> = ({ children }) => {
   const { reportContent, reportContentCategory, isStreaming, currentStatus } = useChatStore()
+  const reportVersions = useChatStore((s) => s.reportVersions)
+  const selectedReportVersionId = useChatStore((s) => s.selectedReportVersionId)
+  const reportViewMode = useChatStore((s) => s.reportViewMode)
+  const setReportViewMode = useChatStore((s) => s.setReportViewMode)
 
-  const reportContentStr = typeof reportContent === 'string' ? reportContent : ''
+  const versionedContent = useMemo(() => {
+    if (reportVersions.length === 0) return null
+    const selected = reportVersions.find((v) => v.versionId === selectedReportVersionId)
+    return selected ?? reportVersions[reportVersions.length - 1]
+  }, [reportVersions, selectedReportVersionId])
+
+  const parentContent = useMemo(() => {
+    if (!versionedContent?.parentVersionId) return null
+    const parent = reportVersions.find((v) => v.versionId === versionedContent.parentVersionId)
+    return parent?.content ?? null
+  }, [reportVersions, versionedContent])
+
+  const canShowDiff = parentContent !== null
+
+  const reportContentStr = typeof (versionedContent?.content ?? reportContent) === 'string'
+    ? (versionedContent?.content ?? reportContent) as string
+    : ''
   const isEmpty = !reportContentStr.trim()
   const isGeneratingReport = isStreaming && currentStatus === 'writing'
   const isResearchNotes = reportContentCategory === 'research_notes'
 
   return (
     <Flex direction="col" className="h-full">
+      <ReportVersionSelector />
+
+      {canShowDiff && !isEmpty && !isResearchNotes && (
+        <Flex align="center" gap="1" className="shrink-0 mb-3">
+          <button
+            onClick={() => setReportViewMode('latest')}
+            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+              reportViewMode === 'latest'
+                ? 'bg-surface-tertiary text-primary'
+                : 'text-subtle hover:text-primary'
+            }`}
+            aria-pressed={reportViewMode === 'latest'}
+          >
+            Latest
+          </button>
+          <button
+            onClick={() => setReportViewMode('diff')}
+            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+              reportViewMode === 'diff'
+                ? 'bg-surface-tertiary text-primary'
+                : 'text-subtle hover:text-primary'
+            }`}
+            aria-pressed={reportViewMode === 'diff'}
+          >
+            Diff
+          </button>
+        </Flex>
+      )}
+
       {/* Scrollable content area */}
       <Flex direction="col" gap="4" className="flex-1 overflow-y-auto">
         {children ? (
@@ -52,6 +103,10 @@ export const ReportTab: FC<ReportTabProps> = ({ children }) => {
               Report content will appear here when available.
             </Text>
           </Flex>
+        ) : reportViewMode === 'diff' && canShowDiff ? (
+          <div className="flex-1">
+            <ReportDiffView oldContent={parentContent} newContent={reportContentStr} />
+          </div>
         ) : isResearchNotes ? (
           /* Research notes: preview treatment */
           <Flex direction="col" gap="3" className="flex-1">
