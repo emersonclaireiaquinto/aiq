@@ -46,6 +46,7 @@ from nat.data_models.function import FunctionBaseConfig
 
 from .models import ChatResearcherState
 from .utils import _extract_query_and_sources
+from .utils import extract_report_context
 
 # Tracks async deep research jobs: conversation_id → job_id.
 # Used to backfill the ReportVersionStore on the next follow-up turn.
@@ -482,17 +483,37 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
                 logger.debug("No session context - cannot determine collection")
         except Exception as e:
             logger.warning("Could not fetch available documents: %s", e)
-        # Backfill ReportVersionStore from a completed async deep research job.
-        # In async mode, deep_research_node returns "Job submitted" without storing
-        # a version. On the next turn, query the EventStore for the final report.
+        # Backfill ReportVersionStore: try frontend report_context first, then EventStore.
         existing_versions = await report_version_store.list(nat_context_conversation_id)
         if not existing_versions:
-            pending_job_id = _pending_deep_research_jobs.pop(nat_context_conversation_id, None)
-            if pending_job_id:
-                try:
-                    await _backfill_from_event_store(pending_job_id, nat_context_conversation_id, report_version_store)
-                except Exception as e:
-                    logger.debug("Report version backfill failed for job %s: %s", pending_job_id, e)
+            report_context = extract_report_context(query)
+            logger.info(
+                "Backfill check: report_context=%s, payload_type=%s, payload_keys=%s",
+                f"{len(report_context)} chars" if report_context else "None",
+                type(query).__name__,
+                list(query.keys()) if isinstance(query, dict) else "N/A",
+            )
+            if report_context:
+                from aiq_agent.common.report_version_store import ReportVersion
+
+                version = ReportVersion(
+                    conversation_id=nat_context_conversation_id,
+                    content=report_context,
+                    triggering_query="Deep research",
+                )
+                await report_version_store.append(version)
+                logger.info(
+                    "Backfilled report version %s from frontend (%d chars)", version.version_id, len(report_context)
+                )
+            else:
+                pending_job_id = _pending_deep_research_jobs.pop(nat_context_conversation_id, None)
+                if pending_job_id:
+                    try:
+                        await _backfill_from_event_store(
+                            pending_job_id, nat_context_conversation_id, report_version_store
+                        )
+                    except Exception as e:
+                        logger.warning("EventStore backfill failed for job %s: %s", pending_job_id, e)
 
         # Set session-scoped source registry for citation verification across turns.
         # When no conversation ID is available, get_or_create_session_registry returns a
