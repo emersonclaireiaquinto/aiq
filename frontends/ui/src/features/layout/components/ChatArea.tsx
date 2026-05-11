@@ -155,7 +155,7 @@ export const ChatArea: FC<ChatAreaProps> = ({ isAuthenticated = false, onSignIn 
 
                 {/* Render thinking steps after user messages — negative margin lets the next message overlap */}
                 {isUserMessage && hasThinkingSteps && (
-                  <Flex justify="start" className="-mb-8 w-[85%]">
+                  <Flex justify="start" className="w-[85%]">
                     <ChatThinking
                       steps={messageSteps}
                       isThinking={isStreaming && message.id === currentUserMessageId}
