@@ -439,6 +439,10 @@ export interface ChatState {
   selectedReportVersionId: string | null
   /** View mode for report display */
   reportViewMode: 'latest' | 'diff'
+  /** Whether the current deep research job was triggered from report follow-up */
+  isFollowupDeepResearch: boolean
+  /** Pending research result to auto-integrate into the report */
+  pendingReportIntegration: { jobId: string; content: string } | null
 }
 
 /** Chat actions for Zustand store */
@@ -675,6 +679,10 @@ export interface ChatActions {
   selectReportVersion: (versionId: string | null) => void
   /** Set report view mode (latest = rendered markdown, diff = inline diff vs parent) */
   setReportViewMode: (mode: 'latest' | 'diff') => void
+  /** Mark the current deep research job as a followup (for auto-integration) */
+  setFollowupDeepResearch: (isFollowup: boolean) => void
+  /** Set pending research result to auto-integrate */
+  setPendingReportIntegration: (pending: { jobId: string; content: string } | null) => void
 
   // Session busy checks (for disabling UI controls)
 

@@ -280,6 +280,11 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
           const currentPlanMessages = state.planMessages
           const currentConversation = state.currentConversation
 
+          // Mark as followup deep research if a report already exists
+          if (state.reportVersions.length > 0) {
+            state.setFollowupDeepResearch(true)
+          }
+
           // Extract research title from plan messages for conversation title
           // Try multiple sources: plan preview, any plan message, or original user query
           if (currentConversation) {
@@ -828,6 +833,29 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
     },
     [storeSelectConversation]
   )
+
+  // Auto-integrate deep research results into the report
+  const pendingReportIntegration = useChatStore((s) => s.pendingReportIntegration)
+  useEffect(() => {
+    if (!pendingReportIntegration) return
+    const { content, jobId } = pendingReportIntegration
+    useChatStore.getState().setPendingReportIntegration(null)
+
+    // Truncate content for the integration message to avoid oversized payloads
+    const truncated = content.length > 8000 ? content.slice(0, 8000) + '\n\n[truncated]' : content
+
+    const integrationMessage = [
+      `[SYSTEM: Deep research job ${jobId} completed. Below is the researched content.`,
+      'Integrate this into the existing report using edit_report or rewrite_report.',
+      'Do not respond conversationally — just make the edits.]\n',
+      truncated,
+    ].join(' ')
+
+    // Small delay to let the UI settle after deep research completion
+    setTimeout(() => {
+      sendMessage(integrationMessage)
+    }, 1500)
+  }, [pendingReportIntegration, sendMessage])
 
   // Get user's filtered conversations
   const userConversations = getUserConversations()

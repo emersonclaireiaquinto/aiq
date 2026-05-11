@@ -215,6 +215,8 @@ const initialState: ChatState = {
   reportVersions: [],
   selectedReportVersionId: null,
   reportViewMode: 'latest' as const,
+  isFollowupDeepResearch: false,
+  pendingReportIntegration: null,
 }
 
 /**
@@ -2669,6 +2671,14 @@ export const useChatStore = create<ChatStore>()(
 
         setReportViewMode: (mode) => {
           set({ reportViewMode: mode }, false, 'setReportViewMode')
+        },
+
+        setFollowupDeepResearch: (isFollowup) => {
+          set({ isFollowupDeepResearch: isFollowup }, false, 'setFollowupDeepResearch')
+        },
+
+        setPendingReportIntegration: (pending) => {
+          set({ pendingReportIntegration: pending }, false, 'setPendingReportIntegration')
         },
 
         // ============================================================

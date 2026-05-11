@@ -289,7 +289,7 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
 
             if (status === 'success') {
               setCurrentStatus('complete')
-              const { reportContent: currentReport, deepResearchLLMSteps, deepResearchToolCalls, reportVersions, addReportVersion } = state
+              const { reportContent: currentReport, deepResearchLLMSteps, deepResearchToolCalls, reportVersions, addReportVersion, isFollowupDeepResearch, setPendingReportIntegration, setFollowupDeepResearch } = state
               const totalTokens = deepResearchLLMSteps.reduce((sum, step) => sum + (step.usage?.input_tokens || 0) + (step.usage?.output_tokens || 0), 0)
               const toolCallCount = deepResearchToolCalls.length
               const hasReport = Boolean(currentReport?.trim())
@@ -305,6 +305,12 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
                   triggeringQuery: lastUserMsg?.content ?? 'Deep research',
                   createdAt: new Date(),
                 })
+              }
+
+              // If this was a followup deep research, queue auto-integration
+              if (isFollowupDeepResearch && hasReport && currentReport) {
+                setPendingReportIntegration({ jobId, content: currentReport })
+                setFollowupDeepResearch(false)
               }
 
               if (ownerConvId && messageId) {
