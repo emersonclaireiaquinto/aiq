@@ -514,6 +514,12 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
                         )
                     except Exception as e:
                         logger.warning("EventStore backfill failed for job %s: %s", pending_job_id, e)
+                else:
+                    logger.warning(
+                        "No report_context and no pending deep research job for conversation %s. "
+                        "Auto-integration may have failed on the frontend.",
+                        nat_context_conversation_id,
+                    )
 
         # Set session-scoped source registry for citation verification across turns.
         # When no conversation ID is available, get_or_create_session_registry returns a
@@ -557,16 +563,18 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
             if latest.parent_version_id:
                 parent = await report_version_store.get(nat_context_conversation_id, latest.parent_version_id)
                 parent_content = parent.content if parent else None
-            response_content = _json.dumps({
-                "message": response_content,
-                "report_version": {
-                    "versionId": latest.version_id,
-                    "parentVersionId": latest.parent_version_id,
-                    "content": latest.content,
-                    "triggeringQuery": latest.triggering_query,
-                    "parentContent": parent_content,
-                },
-            })
+            response_content = _json.dumps(
+                {
+                    "message": response_content,
+                    "report_version": {
+                        "versionId": latest.version_id,
+                        "parentVersionId": latest.parent_version_id,
+                        "content": latest.content,
+                        "triggeringQuery": latest.triggering_query,
+                        "parentContent": parent_content,
+                    },
+                }
+            )
             logger.info("Embedding updated report version %s in response", latest.version_id)
 
         # Track async deep research job IDs for backfilling on the next turn.

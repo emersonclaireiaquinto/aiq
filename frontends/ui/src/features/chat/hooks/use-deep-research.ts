@@ -293,6 +293,7 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
               const totalTokens = deepResearchLLMSteps.reduce((sum, step) => sum + (step.usage?.input_tokens || 0) + (step.usage?.output_tokens || 0), 0)
               const toolCallCount = deepResearchToolCalls.length
               const hasReport = Boolean(currentReport?.trim())
+              console.info(`[deep-research] Job ${jobId} success: isFollowup=${isFollowupDeepResearch}, hasReport=${hasReport}, reportLength=${currentReport?.length ?? 0}`)
 
               // Only add a version for initial deep research, not followup.
               // Followup versions are created by the report_followup agent via edit_report/rewrite_report.
@@ -312,8 +313,11 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
 
               // If this was a followup deep research, queue auto-integration
               if (isFollowupDeepResearch && hasReport && currentReport) {
+                console.info(`[deep-research] Queued pendingReportIntegration for job ${jobId} (${currentReport.length} chars)`)
                 setPendingReportIntegration({ jobId, content: currentReport })
                 setFollowupDeepResearch(false)
+              } else if (isFollowupDeepResearch) {
+                console.warn(`[deep-research] Followup job ${jobId} completed but report is empty — skipping auto-integration`)
               }
 
               if (ownerConvId && messageId) {

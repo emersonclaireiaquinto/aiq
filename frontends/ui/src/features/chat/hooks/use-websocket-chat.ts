@@ -856,14 +856,20 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
     [storeSelectConversation]
   )
 
-  // Auto-integrate deep research results into the report
+  // Auto-integrate deep research results into the report.
+  // When follow-up deep research completes, send the new content back to the
+  // report_followup agent so it can call edit_report / rewrite_report.
   const pendingReportIntegration = useChatStore((s) => s.pendingReportIntegration)
   useEffect(() => {
     if (!pendingReportIntegration) return
     const { content, jobId } = pendingReportIntegration
-    useChatStore.getState().setPendingReportIntegration(null)
 
-    // Truncate content for the integration message to avoid oversized payloads
+    const MAX_RETRIES = 3
+    const BASE_DELAY_MS = 2000
+    let attempt = 0
+    let timerId: ReturnType<typeof setTimeout> | null = null
+    let cancelled = false
+
     const truncated = content.length > 8000 ? content.slice(0, 8000) + '\n\n[truncated]' : content
 
     const integrationMessage = [
@@ -874,16 +880,35 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
       truncated,
     ].join('\n')
 
-    // Send directly via WebSocket without adding a visible user message.
-    // Set streaming state so the UI shows a loading indicator.
-    setTimeout(() => {
+    const trySend = () => {
+      if (cancelled) return
+      attempt++
+
       if (wsClientRef.current?.isConnected()) {
+        console.info(`[auto-integration] Sending integration message for job ${jobId} (attempt ${attempt})`)
         setCurrentStatus('thinking')
         setStreaming(true)
         const layoutState = useLayoutStore.getState()
-        wsClientRef.current.sendMessage(integrationMessage, [...layoutState.enabledDataSourceIds])
+        const { reportContent: currentReportContent } = useChatStore.getState()
+        const reportContext = currentReportContent?.trim() ? currentReportContent : undefined
+        wsClientRef.current.sendMessage(integrationMessage, [...layoutState.enabledDataSourceIds], reportContext)
+        useChatStore.getState().setPendingReportIntegration(null)
+      } else if (attempt < MAX_RETRIES) {
+        const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1)
+        console.warn(`[auto-integration] WebSocket not connected for job ${jobId}, retry ${attempt}/${MAX_RETRIES} in ${delay}ms`)
+        timerId = setTimeout(trySend, delay)
+      } else {
+        console.error(`[auto-integration] Failed to send integration for job ${jobId} after ${MAX_RETRIES} attempts — WebSocket not connected`)
+        useChatStore.getState().setPendingReportIntegration(null)
       }
-    }, 2000)
+    }
+
+    timerId = setTimeout(trySend, BASE_DELAY_MS)
+
+    return () => {
+      cancelled = true
+      if (timerId !== null) clearTimeout(timerId)
+    }
   }, [pendingReportIntegration])
 
   // Get user's filtered conversations
