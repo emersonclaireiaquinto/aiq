@@ -245,6 +245,28 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
           return
         }
 
+        // Check for embedded report update from report_followup agent edits
+        if (content?.startsWith('{"message":') && content.includes('"report_version"')) {
+          try {
+            const parsed = JSON.parse(content)
+            if (parsed.report_version) {
+              const { setReportContent, addReportVersion } = useChatStore.getState()
+              setReportContent(parsed.report_version.content)
+              addReportVersion({
+                versionId: parsed.report_version.versionId,
+                parentVersionId: parsed.report_version.parentVersionId ?? null,
+                content: parsed.report_version.content,
+                triggeringQuery: parsed.report_version.triggeringQuery ?? '',
+                createdAt: new Date(),
+              })
+              // Replace content with the chat message text for display
+              content = parsed.message
+            }
+          } catch {
+            // Not valid JSON, continue with original content
+          }
+        }
+
         // Check for deep research escalation signal
         // Backend sends: "Deep research job submitted. Job ID: {uuid}"
         const deepResearchMatch = content?.match(

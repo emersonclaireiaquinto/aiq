@@ -525,6 +525,24 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
         else:
             response_content = "No response generated."
 
+        # If the report was edited during this turn, embed the updated content
+        # in the response so the frontend can update the report panel.
+        post_versions = await report_version_store.list(nat_context_conversation_id)
+        if len(post_versions) > len(version_ids):
+            import json as _json
+
+            latest = post_versions[-1]
+            response_content = _json.dumps({
+                "message": response_content,
+                "report_version": {
+                    "versionId": latest.version_id,
+                    "parentVersionId": latest.parent_version_id,
+                    "content": latest.content,
+                    "triggeringQuery": latest.triggering_query,
+                },
+            })
+            logger.info("Embedding updated report version %s in response", latest.version_id)
+
         # Track async deep research job IDs for backfilling on the next turn.
         if isinstance(response_content, str) and _JOB_ID_PATTERN in response_content:
             import re
