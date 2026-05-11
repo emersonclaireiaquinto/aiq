@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AIQ Chat Researcher - Architecture Diagram</title>
+<style>
+  body { margin: 0; padding: 40px; background: #f8f9fa; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+  svg { display: block; margin: 0 auto; }
+  /* Tooltip */
+  .tooltip { font-size: 11px; fill: #555; }
+</style>
+</head>
+<body>
+<svg viewBox="0 0 1240 720" width="1240" height="720" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 3.5 L 0 7 z" fill="#666"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 3.5 L 0 7 z" fill="#2e7d32"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 3.5 L 0 7 z" fill="#1565c0"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 3.5 L 0 7 z" fill="#e65100"/>
+    </marker>
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="108%">
+      <feDropShadow dx="1" dy="2" stdDeviation="2" flood-opacity="0.12"/>
+    </filter>
+    <linearGradient id="grad-green" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#66bb6a"/><stop offset="100%" stop-color="#43a047"/>
+    </linearGradient>
+    <linearGradient id="grad-orange" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffa726"/><stop offset="100%" stop-color="#fb8c00"/>
+    </linearGradient>
+    <linearGradient id="grad-blue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#42a5f5"/><stop offset="100%" stop-color="#1e88e5"/>
+    </linearGradient>
+    <linearGradient id="grad-teal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#26a69a"/><stop offset="100%" stop-color="#00897b"/>
+    </linearGradient>
+    <linearGradient id="grad-purple" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ab47bc"/><stop offset="100%" stop-color="#8e24aa"/>
+    </linearGradient>
+    <linearGradient id="grad-red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ef5350"/><stop offset="100%" stop-color="#e53935"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Title -->
+  <text x="620" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#333">AIQ Chat Researcher &mdash; Architecture with Report Follow-up</text>
+  <text x="620" y="48" text-anchor="middle" font-size="11" fill="#888">New nodes and flows shown in color. Grey = unchanged from base.</text>
+
+  <!-- ============================================================ -->
+  <!-- USER -->
+  <!-- ============================================================ -->
+  <g transform="translate(30,200)">
+    <circle cx="30" cy="20" r="16" fill="url(#grad-blue)" filter="url(#shadow)"/>
+    <text x="30" y="25" text-anchor="middle" font-size="16" fill="#fff">&#x1F464;</text>
+    <text x="30" y="52" text-anchor="middle" font-size="11" font-weight="600" fill="#333">Agent / User</text>
+  </g>
+
+  <!-- Query arrow -->
+  <line x1="76" y1="218" x2="148" y2="218" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="112" y="210" text-anchor="middle" font-size="10" fill="#666">Query</text>
+
+  <!-- ============================================================ -->
+  <!-- INTENT ROUTER -->
+  <!-- ============================================================ -->
+  <g transform="translate(150,190)">
+    <rect x="0" y="0" width="110" height="54" rx="8" fill="url(#grad-orange)" filter="url(#shadow)"/>
+    <text x="55" y="23" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">Intent</text>
+    <text x="55" y="38" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">Router</text>
+  </g>
+
+  <!-- ============================================================ -->
+  <!-- DECISION: Has Report? (NEW) -->
+  <!-- ============================================================ -->
+  <g transform="translate(300,190)">
+    <polygon points="50,0 100,27 50,54 0,27" fill="#fff" stroke="#2e7d32" stroke-width="2" filter="url(#shadow)"/>
+    <text x="50" y="24" text-anchor="middle" font-size="10" font-weight="600" fill="#2e7d32">Has</text>
+    <text x="50" y="36" text-anchor="middle" font-size="10" font-weight="600" fill="#2e7d32">Report?</text>
+  </g>
+  <!-- Intent Router → Has Report? -->
+  <line x1="260" y1="218" x2="300" y2="218" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ============================================================ -->
+  <!-- REPORT FOLLOW-UP (NEW) -->
+  <!-- ============================================================ -->
+  <g transform="translate(290,80)">
+    <rect x="0" y="0" width="120" height="54" rx="8" fill="url(#grad-green)" filter="url(#shadow)"/>
+    <text x="60" y="20" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">Report</text>
+    <text x="60" y="34" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">Follow-up</text>
+    <text x="60" y="48" text-anchor="middle" font-size="9" fill="#e8f5e9">(NEW)</text>
+  </g>
+  <!-- Has Report? → Report Follow-up (Yes) -->
+  <line x1="350" y1="190" x2="350" y2="134" stroke="#2e7d32" stroke-width="1.8" marker-end="url(#arrow-green)"/>
+  <text x="362" y="166" font-size="10" font-weight="600" fill="#2e7d32">Yes</text>
+
+  <!-- ============================================================ -->
+  <!-- Report Follow-up classifier buckets (NEW) -->
+  <!-- ============================================================ -->
+  <!-- answer_from_report → back to user -->
+  <g transform="translate(174,44)">
+    <rect x="0" y="0" width="90" height="30" rx="5" fill="#e8f5e9" stroke="#66bb6a" stroke-width="1"/>
+    <text x="45" y="19" text-anchor="middle" font-size="9" fill="#2e7d32">Answer from</text>
+    <text x="45" y="28" text-anchor="middle" font-size="9" fill="#2e7d32">Report</text>
+  </g>
+  <line x1="290" y1="95" x2="264" y2="74" stroke="#2e7d32" stroke-width="1.2" marker-end="url(#arrow-green)"/>
+
+  <g transform="translate(174,2)">
+    <rect x="0" y="0" width="90" height="30" rx="5" fill="#e8f5e9" stroke="#66bb6a" stroke-width="1"/>
+    <text x="45" y="19" text-anchor="middle" font-size="9" fill="#2e7d32">Gap Detected</text>
+  </g>
+  <line x1="290" y1="88" x2="264" y2="32" stroke="#2e7d32" stroke-width="1.2" marker-end="url(#arrow-green)"/>
+
+  <!-- Answer/Gap → back to user -->
+  <path d="M 174,30 L 60,30 L 60,200" stroke="#2e7d32" stroke-width="1.2" fill="none" marker-end="url(#arrow-green)" stroke-dasharray="4,3"/>
+  <text x="100" y="24" font-size="9" fill="#2e7d32">Chat Response</text>
+
+  <!-- refine_report → Deep Research (edit mode) -->
+  <g transform="translate(440,68)">
+    <rect x="0" y="0" width="90" height="30" rx="5" fill="#fff3e0" stroke="#fb8c00" stroke-width="1"/>
+    <text x="45" y="19" text-anchor="middle" font-size="9" fill="#e65100">Refine Report</text>
+  </g>
+  <line x1="410" y1="95" x2="440" y2="83" stroke="#e65100" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+
+  <!-- new_topic → falls through to normal flow -->
+  <g transform="translate(440,108)">
+    <rect x="0" y="0" width="90" height="28" rx="5" fill="#f3e5f5" stroke="#ab47bc" stroke-width="1"/>
+    <text x="45" y="18" text-anchor="middle" font-size="9" fill="#7b1fa2">New Topic</text>
+  </g>
+  <line x1="410" y1="107" x2="440" y2="118" stroke="#7b1fa2" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <!-- New Topic arrow down to Shallow Research -->
+  <path d="M 530,122 L 545,122 L 545,200 L 470,218" stroke="#7b1fa2" stroke-width="1.2" fill="none" marker-end="url(#arrow)" stroke-dasharray="4,3"/>
+  <text x="552" y="165" font-size="9" fill="#7b1fa2" transform="rotate(90,552,165)">fallthrough</text>
+
+  <!-- ============================================================ -->
+  <!-- SHALLOW RESEARCH -->
+  <!-- ============================================================ -->
+  <g transform="translate(418,190)">
+    <rect x="0" y="0" width="110" height="54" rx="8" fill="url(#grad-orange)" filter="url(#shadow)"/>
+    <text x="55" y="23" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">Shallow</text>
+    <text x="55" y="38" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">Research</text>
+  </g>
+  <!-- Has Report? → Shallow Research (No) -->
+  <line x1="400" y1="218" x2="418" y2="218" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="404" y="232" font-size="10" fill="#666">No</text>
+
+  <!-- Report context dashed line to Shallow -->
+  <path d="M 350,134 C 350,160 473,155 473,190" stroke="#2e7d32" stroke-width="1.2" fill="none" stroke-dasharray="4,3" marker-end="url(#arrow-green)"/>
+  <text x="428" y="162" font-size="8" fill="#2e7d32">report context</text>
+
+  <!-- Short Answer back to user -->
+  <path d="M 418,230 C 300,280 120,280 60,240" stroke="#666" stroke-width="1.2" fill="none" marker-end="url(#arrow)" stroke-dasharray="5,3"/>
+  <text x="220" y="278" text-anchor="middle" font-size="10" fill="#666">Short Answer</text>
+
+  <!-- ============================================================ -->
+  <!-- ESCALATION DECISION -->
+  <!-- ============================================================ -->
+  <g transform="translate(565,190)">
+    <polygon points="34,0 68,27 34,54 0,27" fill="#fff" stroke="#e65100" stroke-width="2" filter="url(#shadow)"/>
+    <text x="34" y="24" text-anchor="middle" font-size="9" font-weight="600" fill="#e65100">Esca-</text>
+    <text x="34" y="34" text-anchor="middle" font-size="9" font-weight="600" fill="#e65100">lation?</text>
+  </g>
+  <line x1="528" y1="218" x2="565" y2="218" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- No → back (already handled by short answer) -->
+
+  <!-- ============================================================ -->
+  <!-- HITL CLARIFICATION & PLANNING -->
+  <!-- ============================================================ -->
+  <g transform="translate(665,190)">
+    <rect x="0" y="0" width="120" height="54" rx="8" fill="url(#grad-orange)" filter="url(#shadow)"/>
+    <text x="60" y="18" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">HITL</text>
+    <text x="60" y="31" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">Clarification</text>
+    <text x="60" y="44" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">&amp; Planning</text>
+  </g>
+  <!-- Escalation Yes → Clarification -->
+  <line x1="633" y1="218" x2="665" y2="218" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="640" y="208" font-size="10" fill="#e65100">Yes</text>
+
+  <!-- Clarifying Q&R back to user -->
+  <path d="M 725,190 C 725,160 400,130 60,190" stroke="#666" stroke-width="1" fill="none" marker-end="url(#arrow)" stroke-dasharray="5,3"/>
+  <text x="400" y="142" text-anchor="middle" font-size="9" fill="#888">Clarifying Questions &amp; Responses</text>
+
+  <!-- ============================================================ -->
+  <!-- AUTONOMOUS DEEP RESEARCHER -->
+  <!-- ============================================================ -->
+  <g transform="translate(840,100)">
+    <rect x="0" y="0" width="370" height="250" rx="12" fill="#fff" stroke="#e65100" stroke-width="2" filter="url(#shadow)"/>
+    <text x="185" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="#e65100">Autonomous Deep Researcher</text>
+
+    <!-- Orchestrator -->
+    <g transform="translate(20,40)">
+      <rect x="0" y="0" width="100" height="44" rx="6" fill="url(#grad-orange)" filter="url(#shadow)"/>
+      <text x="50" y="27" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">Orchestrator</text>
+    </g>
+
+    <!-- Researcher Sub-Agents -->
+    <g transform="translate(140,40)">
+      <rect x="0" y="0" width="100" height="44" rx="6" fill="url(#grad-orange)" filter="url(#shadow)"/>
+      <text x="50" y="20" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">Researcher</text>
+      <text x="50" y="34" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">Sub-Agents</text>
+    </g>
+
+    <!-- Planning Sub-Agents -->
+    <g transform="translate(260,40)">
+      <rect x="0" y="0" width="90" height="44" rx="6" fill="url(#grad-orange)" filter="url(#shadow)"/>
+      <text x="45" y="20" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">Planning</text>
+      <text x="45" y="34" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">Sub-Agents</text>
+    </g>
+
+    <!-- Shared Virtual File System -->
+    <g transform="translate(20,105)">
+      <rect x="0" y="0" width="330" height="60" rx="6" fill="#fff3e0" stroke="#ffb74d" stroke-width="1.5"/>
+      <text x="165" y="16" text-anchor="middle" font-size="10" font-weight="700" fill="#e65100">Shared Virtual File System</text>
+      <!-- File items -->
+      <g transform="translate(15,24)">
+        <rect x="0" y="0" width="90" height="28" rx="4" fill="#ffe0b2"/>
+        <text x="45" y="12" text-anchor="middle" font-size="9" fill="#e65100">File System</text>
+        <text x="45" y="23" text-anchor="middle" font-size="9" fill="#e65100">Workspace</text>
+      </g>
+      <g transform="translate(120,24)">
+        <rect x="0" y="0" width="70" height="28" rx="4" fill="#ffe0b2"/>
+        <text x="35" y="18" text-anchor="middle" font-size="9" fill="#e65100">ToDo List</text>
+      </g>
+      <g transform="translate(205,24)">
+        <rect x="0" y="0" width="110" height="28" rx="4" fill="#c8e6c9" stroke="#66bb6a" stroke-width="1"/>
+        <text x="55" y="12" text-anchor="middle" font-size="9" font-weight="600" fill="#2e7d32">/report.md</text>
+        <text x="55" y="23" text-anchor="middle" font-size="8" fill="#2e7d32">(edit mode)</text>
+      </g>
+    </g>
+
+    <!-- Edit mode label -->
+    <g transform="translate(20,180)">
+      <rect x="0" y="0" width="330" height="55" rx="6" fill="#e8f5e9" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <text x="165" y="16" text-anchor="middle" font-size="10" font-weight="700" fill="#2e7d32">Edit Mode (NEW)</text>
+      <text x="165" y="30" text-anchor="middle" font-size="9" fill="#2e7d32">edit_file &mdash; targeted patches (default)</text>
+      <text x="165" y="42" text-anchor="middle" font-size="9" fill="#2e7d32">write_file &mdash; structural rewrites (fallback)</text>
+    </g>
+  </g>
+
+  <!-- Clarification → Deep Researcher -->
+  <line x1="785" y1="218" x2="840" y2="218" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Refine Report → Deep Researcher (edit mode) -->
+  <path d="M 530,83 C 700,60 830,60 900,100" stroke="#e65100" stroke-width="1.8" fill="none" marker-end="url(#arrow-orange)"/>
+  <text x="720" y="52" text-anchor="middle" font-size="9" font-weight="600" fill="#e65100">edit_instruction + prior_report (sync)</text>
+
+  <!-- Deep Research Report back to user -->
+  <path d="M 1025,350 L 1025,380 L 60,380 L 60,240" stroke="#e65100" stroke-width="1.5" fill="none" marker-end="url(#arrow-orange)"/>
+  <text x="540" y="394" text-anchor="middle" font-size="10" fill="#e65100">Deep Research Report (new version)</text>
+
+  <!-- ============================================================ -->
+  <!-- REPORT VERSION STORE (NEW) -->
+  <!-- ============================================================ -->
+  <g transform="translate(840,370)">
+    <rect x="0" y="0" width="160" height="50" rx="8" fill="url(#grad-green)" filter="url(#shadow)"/>
+    <text x="80" y="20" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">Report Version</text>
+    <text x="80" y="35" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">Store</text>
+    <text x="80" y="48" text-anchor="middle" font-size="8" fill="#e8f5e9">(NEW &mdash; in-memory / swappable to SQL)</text>
+  </g>
+  <!-- Deep Researcher → Version Store -->
+  <line x1="980" y1="350" x2="960" y2="370" stroke="#2e7d32" stroke-width="1.2" marker-end="url(#arrow-green)" stroke-dasharray="4,3"/>
+  <!-- Version Store → Report Follow-up (read) -->
+  <path d="M 840,395 C 500,420 350,350 350,134" stroke="#2e7d32" stroke-width="1.2" fill="none" marker-end="url(#arrow-green)" stroke-dasharray="4,3"/>
+  <text x="560" y="390" font-size="8" fill="#2e7d32">latest report for classification</text>
+
+  <!-- ============================================================ -->
+  <!-- DATA SOURCE TOOLS -->
+  <!-- ============================================================ -->
+  <g transform="translate(300,440)">
+    <rect x="0" y="0" width="360" height="70" rx="10" fill="#fff" stroke="#ccc" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="180" y="16" text-anchor="middle" font-size="11" font-weight="700" fill="#555">Data Source Tools</text>
+    <g transform="translate(15,26)">
+      <rect x="0" y="0" width="100" height="34" rx="5" fill="url(#grad-teal)"/>
+      <text x="50" y="15" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">Web Search</text>
+      <text x="50" y="27" text-anchor="middle" font-size="8" fill="#e0f2f1">Tavily API</text>
+    </g>
+    <g transform="translate(130,26)">
+      <rect x="0" y="0" width="100" height="34" rx="5" fill="url(#grad-teal)"/>
+      <text x="50" y="15" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">Academic Papers</text>
+      <text x="50" y="27" text-anchor="middle" font-size="8" fill="#e0f2f1">Serper API</text>
+    </g>
+    <g transform="translate(245,26)">
+      <rect x="0" y="0" width="100" height="34" rx="5" fill="url(#grad-teal)"/>
+      <text x="50" y="15" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">Knowledge Layer</text>
+      <text x="50" y="27" text-anchor="middle" font-size="8" fill="#e0f2f1">API</text>
+    </g>
+  </g>
+
+  <!-- ============================================================ -->
+  <!-- RAG KNOWLEDGE LAYER -->
+  <!-- ============================================================ -->
+  <g transform="translate(300,540)">
+    <rect x="0" y="0" width="360" height="60" rx="10" fill="#fff" stroke="#ccc" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="180" y="16" text-anchor="middle" font-size="11" font-weight="700" fill="#555">RAG Knowledge Layer</text>
+    <g transform="translate(10,24)">
+      <rect x="0" y="0" width="75" height="28" rx="4" fill="#e3f2fd"/>
+      <text x="37" y="12" text-anchor="middle" font-size="8" fill="#1565c0">Extraction</text>
+      <text x="37" y="22" text-anchor="middle" font-size="7" fill="#1565c0">NeMo Retriever</text>
+    </g>
+    <g transform="translate(95,24)">
+      <rect x="0" y="0" width="75" height="28" rx="4" fill="#e3f2fd"/>
+      <text x="37" y="12" text-anchor="middle" font-size="8" fill="#1565c0">Embedding</text>
+      <text x="37" y="22" text-anchor="middle" font-size="7" fill="#1565c0">NeMo Retriever</text>
+    </g>
+    <g transform="translate(180,24)">
+      <rect x="0" y="0" width="80" height="28" rx="4" fill="#e3f2fd"/>
+      <text x="40" y="12" text-anchor="middle" font-size="8" fill="#1565c0">Vector DB</text>
+      <text x="40" y="22" text-anchor="middle" font-size="7" fill="#1565c0">NVIDIA cuVS</text>
+    </g>
+    <g transform="translate(270,24)">
+      <rect x="0" y="0" width="75" height="28" rx="4" fill="#e3f2fd"/>
+      <text x="37" y="12" text-anchor="middle" font-size="8" fill="#1565c0">Reranking</text>
+      <text x="37" y="22" text-anchor="middle" font-size="7" fill="#1565c0">NeMo Retriever</text>
+    </g>
+  </g>
+
+  <!-- File Upload / Enterprise Data -->
+  <g transform="translate(30,500)">
+    <rect x="0" y="0" width="90" height="36" rx="6" fill="#e8eaf6" stroke="#7986cb" stroke-width="1"/>
+    <text x="45" y="15" text-anchor="middle" font-size="9" font-weight="600" fill="#3949ab">File Upload</text>
+    <text x="45" y="27" text-anchor="middle" font-size="8" fill="#3949ab">Enterprise Data</text>
+  </g>
+  <line x1="120" y1="518" x2="300" y2="560" stroke="#7986cb" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+  <!-- Connections: tools to shallow & deep -->
+  <line x1="473" y1="440" x2="473" y2="244" stroke="#aaa" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="600" y1="440" x2="1025" y2="350" stroke="#aaa" stroke-width="1" stroke-dasharray="3,3"/>
+
+  <!-- ============================================================ -->
+  <!-- FRONTEND: VERSION SELECTOR (NEW) -->
+  <!-- ============================================================ -->
+  <g transform="translate(840,430)">
+    <rect x="0" y="0" width="160" height="46" rx="8" fill="url(#grad-purple)" filter="url(#shadow)"/>
+    <text x="80" y="18" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">UI: Version Selector</text>
+    <text x="80" y="32" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">&amp; Diff View</text>
+    <text x="80" y="44" text-anchor="middle" font-size="8" fill="#f3e5f5">(NEW &mdash; frontend)</text>
+  </g>
+  <line x1="920" y1="420" x2="920" y2="430" stroke="#8e24aa" stroke-width="1.2" marker-end="url(#arrow)" stroke-dasharray="3,3"/>
+
+  <!-- ============================================================ -->
+  <!-- LEGEND -->
+  <!-- ============================================================ -->
+  <g transform="translate(30,640)">
+    <rect x="0" y="0" width="500" height="55" rx="8" fill="#fff" stroke="#ddd" stroke-width="1"/>
+    <text x="15" y="16" font-size="10" font-weight="700" fill="#555">Legend:</text>
+    <rect x="15" y="24" width="14" height="14" rx="3" fill="url(#grad-orange)"/>
+    <text x="35" y="35" font-size="9" fill="#555">Existing node</text>
+    <rect x="115" y="24" width="14" height="14" rx="3" fill="url(#grad-green)"/>
+    <text x="135" y="35" font-size="9" fill="#555">New node / store</text>
+    <rect x="225" y="24" width="14" height="14" rx="3" fill="url(#grad-purple)"/>
+    <text x="245" y="35" font-size="9" fill="#555">New UI component</text>
+    <line x1="350" y1="31" x2="380" y2="31" stroke="#2e7d32" stroke-width="1.5" stroke-dasharray="4,3"/>
+    <text x="386" y="35" font-size="9" fill="#555">Report data flow</text>
+  </g>
+</svg>
+</body>
+</html>
