@@ -46,7 +46,61 @@ from nat.data_models.function import FunctionBaseConfig
 
 from .models import ChatResearcherState
 from .utils import _extract_query_and_sources
-from .utils import extract_report_context
+
+# Tracks async deep research jobs: conversation_id → job_id.
+# Used to backfill the ReportVersionStore on the next follow-up turn.
+_pending_deep_research_jobs: dict[str, str] = {}
+
+_JOB_ID_PATTERN = "Deep research job submitted. Job ID: "
+
+
+async def _backfill_from_event_store(job_id: str, conversation_id: str, store) -> None:
+    """Read the final report from the EventStore and store it as a ReportVersion."""
+    import json
+    import os
+
+    from aiq_agent.common.report_version_store import ReportVersion
+
+    db_url = os.environ.get("NAT_JOB_STORE_DB_URL", "sqlite:///./data/jobs.db")
+    try:
+        from aiq_api.jobs import EventStore
+
+        events = EventStore.get_events(db_url, job_id, after_id=0, limit=5000)
+    except Exception:
+        logger.debug("Could not query EventStore for job %s (db_url=%s)", job_id, db_url)
+        return
+
+    report_content = None
+    for evt in reversed(events):
+        evt_data = evt.get("data", {})
+        if isinstance(evt_data, str):
+            try:
+                evt_data = json.loads(evt_data)
+            except (json.JSONDecodeError, TypeError):
+                continue
+        if (
+            evt.get("event_type") == "artifact.update"
+            and isinstance(evt_data, dict)
+            and evt_data.get("type") == "output"
+            and evt_data.get("output_category") in ("final_report", None)
+        ):
+            content = evt_data.get("content")
+            if isinstance(content, str) and len(content) > 200:
+                report_content = content
+                break
+
+    if not report_content:
+        logger.debug("No final_report artifact found in EventStore for job %s", job_id)
+        return
+
+    version = ReportVersion(
+        conversation_id=conversation_id,
+        content=report_content,
+        triggering_query="Deep research",
+    )
+    await store.append(version)
+    logger.info("Backfilled report version %s from EventStore job %s", version.version_id, job_id)
+
 
 logger = logging.getLogger(__name__)
 
@@ -426,22 +480,17 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
                 logger.debug("No session context - cannot determine collection")
         except Exception as e:
             logger.warning("Could not fetch available documents: %s", e)
-        # Backfill ReportVersionStore from report_context sent by the frontend.
-        # In async mode, deep_research_node returns early ("Job submitted") and
-        # the report is only available on the frontend. The frontend includes
-        # report_context in follow-up messages so the backend can populate the store.
-        report_context = extract_report_context(query)
+        # Backfill ReportVersionStore from a completed async deep research job.
+        # In async mode, deep_research_node returns "Job submitted" without storing
+        # a version. On the next turn, query the EventStore for the final report.
         existing_versions = await report_version_store.list(nat_context_conversation_id)
-        if report_context and not existing_versions:
-            from aiq_agent.common.report_version_store import ReportVersion
-
-            version = ReportVersion(
-                conversation_id=nat_context_conversation_id,
-                content=report_context,
-                triggering_query="Deep research",
-            )
-            await report_version_store.append(version)
-            logger.info("Backfilled report version %s from frontend report_context", version.version_id)
+        if not existing_versions:
+            pending_job_id = _pending_deep_research_jobs.pop(nat_context_conversation_id, None)
+            if pending_job_id:
+                try:
+                    await _backfill_from_event_store(pending_job_id, nat_context_conversation_id, report_version_store)
+                except Exception as e:
+                    logger.debug("Report version backfill failed for job %s: %s", pending_job_id, e)
 
         # Set session-scoped source registry for citation verification across turns.
         # When no conversation ID is available, get_or_create_session_registry returns a
@@ -473,7 +522,17 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
             response_content = messages[-1].content
         else:
             response_content = "No response generated."
-        # return _create_chat_response(response_content, response_id="research_response")
+
+        # Track async deep research job IDs for backfilling on the next turn.
+        if isinstance(response_content, str) and _JOB_ID_PATTERN in response_content:
+            import re
+
+            match = re.search(r"Job ID: ([a-f0-9-]+)", response_content)
+            if match:
+                _pending_deep_research_jobs[nat_context_conversation_id] = match.group(1)
+                logger.info(
+                    "Tracking deep research job %s for conversation %s", match.group(1), nat_context_conversation_id
+                )
 
         # Exit after response when --input is provided
         if "--input" in sys.argv:
