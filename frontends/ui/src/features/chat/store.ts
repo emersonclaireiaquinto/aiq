@@ -114,7 +114,7 @@ const createResilientStorage = (): PersistStorage<PersistedChatState> | undefine
       // Reconstruct Date objects in per-conversation reportVersions (JSON serializes them as strings)
       for (const conv of raw.state.conversations ?? []) {
         if (conv.reportVersions) {
-          conv.reportVersions = conv.reportVersions.map((v: { createdAt: string | Date } & Record<string, unknown>) => ({
+          conv.reportVersions = conv.reportVersions.map((v) => ({
             ...v,
             createdAt: new Date(v.createdAt),
           }))
