@@ -10,7 +10,7 @@
 
 'use client'
 
-import { type FC, useCallback, useState } from 'react'
+import { type FC, useCallback, useMemo, useState } from 'react'
 import { Banner, Flex, Button } from '@/adapters/ui'
 import { useChatStore, useIsCurrentSessionBusy } from '@/features/chat'
 import { downloadAsMarkdown } from '@/utils/download-as-markdown'
@@ -28,12 +28,22 @@ interface ExportFooterProps {
  */
 export const ExportFooter: FC<ExportFooterProps> = ({ disabled }) => {
   const reportContent = useChatStore((state) => state.reportContent)
+  const reportVersions = useChatStore((state) => state.reportVersions)
+  const selectedReportVersionId = useChatStore((state) => state.selectedReportVersionId)
   const conversationTitle = useChatStore((state) => state.currentConversation?.title)
   const { downloadPdf, isLoading: isPdfLoading, error: pdfError, clearError: clearPdfError } = useDownloadPdfRoute()
   const [mdError, setMdError] = useState<string | null>(null)
 
-  // Defensive check: ensure reportContent is a string before calling trim()
-  const reportContentStr = typeof reportContent === 'string' ? reportContent : ''
+  // Use versioned content when available (same source of truth as ReportTab)
+  const versionedContent = useMemo(() => {
+    if (reportVersions.length === 0) return null
+    const selected = reportVersions.find((v) => v.versionId === selectedReportVersionId)
+    return selected?.content ?? reportVersions[reportVersions.length - 1]?.content ?? null
+  }, [reportVersions, selectedReportVersionId])
+
+  const reportContentStr = typeof (versionedContent ?? reportContent) === 'string'
+    ? ((versionedContent ?? reportContent) as string)
+    : ''
   const hasContent = reportContentStr.trim().length > 0
 
   // Uses centralized hook that checks BOTH ephemeral AND persisted state.
