@@ -64,6 +64,8 @@ type PersistedChatState = {
   conversations: ChatState['conversations']
   currentConversation: ChatState['currentConversation']
   pendingInteraction: ChatState['pendingInteraction']
+  reportVersions: ChatState['reportVersions']
+  selectedReportVersionId: ChatState['selectedReportVersionId']
 }
 
 type PersistedChatStorageValue = StorageValue<PersistedChatState>
@@ -88,6 +90,8 @@ const prunePersistedChatState = (value: PersistedChatStorageValue): PersistedCha
       conversations,
       currentConversation: currentConversationId as unknown as Conversation | null,
       pendingInteraction: state.pendingInteraction ?? null,
+      reportVersions: state.reportVersions ?? [],
+      selectedReportVersionId: state.selectedReportVersionId ?? null,
     },
   }
 }
@@ -109,6 +113,14 @@ const createResilientStorage = (): PersistStorage<PersistedChatState> | undefine
       if (storedId) {
         const conversations = raw.state.conversations ?? []
         raw.state.currentConversation = conversations.find((c) => c.id === storedId) ?? null
+      }
+
+      // Reconstruct Date objects in reportVersions (JSON serializes them as strings)
+      if (raw.state.reportVersions) {
+        raw.state.reportVersions = raw.state.reportVersions.map((v) => ({
+          ...v,
+          createdAt: new Date(v.createdAt),
+        }))
       }
 
       return raw
@@ -145,6 +157,8 @@ const createResilientStorage = (): PersistStorage<PersistedChatState> | undefine
               conversations: [],
               currentConversation: null,
               pendingInteraction: null,
+              reportVersions: [],
+              selectedReportVersionId: null,
             },
           })
 
@@ -2718,6 +2732,9 @@ export const useChatStore = create<ChatStore>()(
           currentConversation: state.currentConversation,
           // Persist pending HITL interaction for page refresh recovery
           pendingInteraction: state.pendingInteraction,
+          // Persist report versions so edits survive page refresh
+          reportVersions: state.reportVersions,
+          selectedReportVersionId: state.selectedReportVersionId,
         }),
       }
     ),
