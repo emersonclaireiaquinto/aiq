@@ -137,5 +137,7 @@ Several pieces of logic currently live on the frontend that should be backend-si
 
 1. **Report version backfill** — relies on `_pending_deep_research_jobs` (process-local dict, lost on restart). Should move to persistent storage (SQL-backed `ReportVersionStore`).
 2. **Deep research auto-integration** — the frontend orchestrates feeding deep research results back to the followup agent. If the user closes the tab, the integration is lost. Should be a backend job completion callback.
-3. **Report version persistence** — `reportVersions` is stored in localStorage. Should be persisted server-side so versions survive across devices/sessions.
+3. **Report version persistence** — `reportVersions` is per-conversation in localStorage via Zustand persist. Should be persisted server-side so versions survive across devices/sessions.
 4. **Report content source of truth** — `reportContent` (SSE stream) and `reportVersions` (edit tools) are two separate sources. The frontend resolves them with a priority fallback. A single backend-authoritative source would be cleaner.
+5. **Auto-integration message visibility** — the system integration message is sent via WebSocket client directly but still needs work to be fully hidden from the chat thread.
+6. **Deep research edit mode via Dask** — `submit_agent_job` doesn't support `prior_report`/`edit_instruction` params. The deep researcher runs as a fresh job instead of edit mode. Currently worked around via auto-integration (two-turn flow).
