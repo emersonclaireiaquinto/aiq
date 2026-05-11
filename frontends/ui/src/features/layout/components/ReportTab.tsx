@@ -35,8 +35,8 @@ interface ReportTabProps {
  */
 export const ReportTab: FC<ReportTabProps> = ({ children }) => {
   const { reportContent, reportContentCategory, isStreaming, currentStatus } = useChatStore()
-  const reportVersions = useChatStore((s) => s.reportVersions)
-  const selectedReportVersionId = useChatStore((s) => s.selectedReportVersionId)
+  const reportVersions = useChatStore((s) => s.currentConversation?.reportVersions ?? [])
+  const selectedReportVersionId = useChatStore((s) => s.currentConversation?.selectedReportVersionId ?? null)
   const reportViewMode = useChatStore((s) => s.reportViewMode)
   const setReportViewMode = useChatStore((s) => s.setReportViewMode)
 

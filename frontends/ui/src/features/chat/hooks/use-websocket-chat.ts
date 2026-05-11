@@ -280,8 +280,8 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
           const currentPlanMessages = state.planMessages
           const currentConversation = state.currentConversation
 
-          // Mark as followup deep research if a report already exists
-          if (state.reportVersions.length > 0) {
+          // Mark as followup deep research if a report already exists in this conversation
+          if ((state.currentConversation?.reportVersions ?? []).length > 0) {
             state.setFollowupDeepResearch(true)
           }
 
@@ -853,7 +853,17 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
 
     // Small delay to let the UI settle after deep research completion
     setTimeout(() => {
-      sendMessage(integrationMessage)
+      // Send via WebSocket client directly to avoid adding a visible user message
+      const layoutState = useLayoutStore.getState()
+      const dataSourcesForMessage = layoutState.enabledDataSourceIds
+      const storeState = useChatStore.getState()
+      const currentReportContent = storeState.reportContent?.trim() ? storeState.reportContent : undefined
+
+      if (wsClientRef.current?.isConnected()) {
+        wsClientRef.current.sendMessage(integrationMessage, dataSourcesForMessage, currentReportContent)
+        setCurrentStatus('thinking')
+        setStreaming(true)
+      }
     }, 1500)
   }, [pendingReportIntegration, sendMessage])
 

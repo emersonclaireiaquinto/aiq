@@ -231,6 +231,10 @@ export interface Conversation {
   updatedAt: Date
   /** Per-session enabled data source IDs (persisted across refresh) */
   enabledDataSourceIds?: string[]
+  /** Report versions for this conversation (oldest → newest) */
+  reportVersions?: ReportVersion[]
+  /** Currently selected report version ID */
+  selectedReportVersionId?: string | null
 }
 
 /** Pending human interaction from agent */
@@ -432,11 +436,7 @@ export interface ChatState {
   /** Messages for the PlanTab (clarification questions, plan preview, etc.) */
   planMessages: PlanMessage[]
 
-  // Report versioning state
-  /** All report versions for the current conversation (oldest → newest) */
-  reportVersions: ReportVersion[]
-  /** Currently selected report version ID (null = latest) */
-  selectedReportVersionId: string | null
+  // Report versioning state (per-conversation, accessed via currentConversation)
   /** View mode for report display */
   reportViewMode: 'latest' | 'diff'
   /** Whether the current deep research job was triggered from report follow-up */

@@ -28,8 +28,8 @@ interface ExportFooterProps {
  */
 export const ExportFooter: FC<ExportFooterProps> = ({ disabled }) => {
   const reportContent = useChatStore((state) => state.reportContent)
-  const reportVersions = useChatStore((state) => state.reportVersions)
-  const selectedReportVersionId = useChatStore((state) => state.selectedReportVersionId)
+  const reportVersions = useChatStore((state) => state.currentConversation?.reportVersions ?? [])
+  const selectedReportVersionId = useChatStore((state) => state.currentConversation?.selectedReportVersionId ?? null)
   const conversationTitle = useChatStore((state) => state.currentConversation?.title)
   const { downloadPdf, isLoading: isPdfLoading, error: pdfError, clearError: clearPdfError } = useDownloadPdfRoute()
   const [mdError, setMdError] = useState<string | null>(null)

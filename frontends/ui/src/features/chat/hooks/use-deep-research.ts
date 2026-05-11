@@ -289,7 +289,8 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
 
             if (status === 'success') {
               setCurrentStatus('complete')
-              const { reportContent: currentReport, deepResearchLLMSteps, deepResearchToolCalls, reportVersions, addReportVersion, isFollowupDeepResearch, setPendingReportIntegration, setFollowupDeepResearch } = state
+              const { reportContent: currentReport, deepResearchLLMSteps, deepResearchToolCalls, currentConversation, addReportVersion, isFollowupDeepResearch, setPendingReportIntegration, setFollowupDeepResearch } = state
+              const reportVersions = currentConversation?.reportVersions ?? []
               const totalTokens = deepResearchLLMSteps.reduce((sum, step) => sum + (step.usage?.input_tokens || 0) + (step.usage?.output_tokens || 0), 0)
               const toolCallCount = deepResearchToolCalls.length
               const hasReport = Boolean(currentReport?.trim())

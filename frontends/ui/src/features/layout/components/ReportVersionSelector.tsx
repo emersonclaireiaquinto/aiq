@@ -12,8 +12,8 @@ import { useChatStore } from '@/features/chat'
  * Hidden when only one version exists.
  */
 export const ReportVersionSelector: FC = () => {
-  const reportVersions = useChatStore((s) => s.reportVersions)
-  const selectedReportVersionId = useChatStore((s) => s.selectedReportVersionId)
+  const reportVersions = useChatStore((s) => s.currentConversation?.reportVersions ?? [])
+  const selectedReportVersionId = useChatStore((s) => s.currentConversation?.selectedReportVersionId ?? null)
   const selectReportVersion = useChatStore((s) => s.selectReportVersion)
 
   if (reportVersions.length <= 1) return null
