@@ -152,8 +152,8 @@ export const ReportTab: FC<ReportTabProps> = ({ children }) => {
         )}
       </Flex>
 
-      {/* Export footer - only meaningful for the final report */}
-      <ExportFooter />
+      {/* Export footer - temporarily disabled for debugging */}
+      {/* <ExportFooter /> */}
     </Flex>
   )
 }
