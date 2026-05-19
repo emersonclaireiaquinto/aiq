@@ -167,10 +167,10 @@ export const MainLayout: FC<MainLayoutProps> = ({
           <NoSourcesBanner isAuthenticated={isAuthenticated} />
 
           {/* Input Area - Fixed at bottom of chat */}
-          {/* Using WebSocket mode for full HITL (human-in-the-loop) support */}
+          {/* Using SSE+REST mode for unified chat with HITL support */}
           <InputArea
             isAuthenticated={isAuthenticated}
-            connectionMode="websocket"
+            connectionMode="sse-chat"
           />
         </div>
 

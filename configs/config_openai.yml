@@ -43,7 +43,7 @@ llms:
     _type: openai
     model_name: ${OPENAI_INTENT_MODEL:-qwen-small-instruct}
     base_url: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
-    api_key: ${OPENAI_API_KEY}
+    api_key: "${OPENAI_API_KEY}"
     # temperature: 0.5
     # top_p: 0.9
     # max_tokens: 4096
@@ -56,7 +56,7 @@ llms:
     _type: openai
     model_name: ${OPENAI_RESEARCH_MODEL:-qwen-small-instruct}
     base_url: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
-    api_key: ${OPENAI_API_KEY}
+    api_key: "${OPENAI_API_KEY}"
     # temperature: 0.1
     # top_p: 0.3
     # max_tokens: 16384
@@ -69,7 +69,7 @@ llms:
     _type: openai
     model_name: ${OPENAI_ORCHESTRATOR_MODEL:-qwen-small-instruct}
     base_url: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
-    api_key: ${OPENAI_API_KEY}
+    api_key: "${OPENAI_API_KEY}"
     # temperature: 1.0
     # top_p: 1.0
     max_tokens: 128000
@@ -81,7 +81,7 @@ llms:
     _type: openai
     model_name: ${OPENAI_SUMMARY_MODEL:-qwen-small-instruct}
     base_url: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
-    api_key: ${OPENAI_API_KEY}
+    api_key: "${OPENAI_API_KEY}"
     # temperature: 0.3
     # max_tokens: 100
 
@@ -95,11 +95,16 @@ functions:
         tools:
           - web_search_tool
           - advanced_web_search_tool
-      # - id: paper_search
-      #   name: "Academic Papers"
-      #   description: "Search academic papers and scientific publications."
-      #   tools:
-      #     - paper_search_tool
+      - id: paper_search
+        name: "Academic Papers"
+        description: "Search academic papers and scientific publications."
+        tools:
+          - paper_search_tool
+      - id: knowledge_layer
+        name: "Uploaded Documents"
+        description: "Search your uploaded documents."
+        tools:
+          - knowledge_search
 
   web_search_tool:
     _type: tavily_web_search
@@ -111,22 +116,20 @@ functions:
     max_results: 2
     advanced_search: true
 
-  # Paper Search (optional - requires SERPER_API_KEY)
-  # paper_search_tool:
-  #   _type: paper_search
-  #   max_results: 5
-  #   serper_api_key: ${SERPER_API_KEY}
+  paper_search_tool:
+    _type: paper_search
+    max_results: 5
+    serper_api_key: "${SERPER_API_KEY}"
 
-  # Knowledge Retrieval (optional - uncomment to enable)
-  # knowledge_search:
-  #   _type: knowledge_retrieval
-  #   backend: llamaindex
-  #   collection_name: ${COLLECTION_NAME:-test_collection}
-  #   generate_summary: true
-  #   summary_model: openai_summary_llm
-  #   summary_db: ${AIQ_SUMMARY_DB:-sqlite+aiosqlite:///./summaries.db}
-  #   top_k: 5
-  #   chroma_dir: ${AIQ_CHROMA_DIR:-/tmp/chroma_data}
+  knowledge_search:
+    _type: knowledge_retrieval
+    backend: llamaindex
+    collection_name: ${COLLECTION_NAME:-test_collection}
+    generate_summary: true
+    summary_model: openai_summary_llm
+    summary_db: ${AIQ_SUMMARY_DB:-postgresql+psycopg://aiq:aiq_dev@aiq-postgres:5432/aiq_jobs}
+    top_k: 5
+    chroma_dir: ${AIQ_CHROMA_DIR:-/app/data/chroma_data}
 
   intent_classifier:
     _type: intent_classifier

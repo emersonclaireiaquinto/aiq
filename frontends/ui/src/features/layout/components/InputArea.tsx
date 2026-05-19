@@ -18,14 +18,14 @@
 
 import { type FC, useState, useCallback, useRef, useEffect, type KeyboardEvent } from 'react'
 import { Flex, Text, Button, TextArea, Banner, Popover } from '@/adapters/ui'
-import { useChat, useWebSocketChat, useChatStore, useIsCurrentSessionBusy } from '@/features/chat'
+import { useChat, useWebSocketChat, useSSEChat, useChatStore, useIsCurrentSessionBusy } from '@/features/chat'
 import { useLayoutStore } from '../store'
 import { useAppConfig } from '@/shared/context'
 import { useFileUpload, useFileDragDrop, useFileUploadBanners } from '@/features/documents'
 import { Globe, Document, Paperclip, Paperplane, Cancel } from '@/adapters/ui/icons'
 
 /** Connection mode for the chat */
-export type ConnectionMode = 'sse' | 'websocket'
+export type ConnectionMode = 'sse' | 'websocket' | 'sse-chat'
 
 interface InputAreaProps {
   /** Placeholder text */
@@ -68,6 +68,7 @@ export const InputArea: FC<InputAreaProps> = ({
   // Use appropriate hook based on connection mode
   const sseChat = useChat()
   const wsChat = useWebSocketChat({ autoConnect: connectionMode === 'websocket' })
+  const sseChatUnified = useSSEChat({ autoConnect: connectionMode === 'sse-chat' })
 
   // Get current conversation for filtering files and ensureSession for auto-creation
   const currentConversation = useChatStore((state) => state.currentConversation)
@@ -156,7 +157,7 @@ export const InputArea: FC<InputAreaProps> = ({
   }, [pendingCount, pendingFilesWarningActive, removeFileUploadWarning])
 
   // Select the active hook's methods based on mode
-  const activeChat = connectionMode === 'websocket' ? wsChat : sseChat
+  const activeChat = connectionMode === 'sse-chat' ? sseChatUnified : connectionMode === 'websocket' ? wsChat : sseChat
   const { sendMessage, isLoading, respondToInteraction, pendingInteraction } = activeChat
 
   // Register respondToInteraction in the store so sibling components (e.g. AgentPrompt) can use it

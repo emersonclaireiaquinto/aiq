@@ -196,10 +196,15 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
     updateConversationTitle,
   } = useChatStore()
 
-  // Sync authenticated user ID to store when auth state changes
+  // Sync authenticated user ID to store and hydrate from server
   useEffect(() => {
     const userId = user?.id ?? null
     setCurrentUser(userId)
+    if (userId) {
+      import('../store').then(({ hydrateFromServer }) => {
+        hydrateFromServer()
+      })
+    }
   }, [user?.id, setCurrentUser])
 
   /**

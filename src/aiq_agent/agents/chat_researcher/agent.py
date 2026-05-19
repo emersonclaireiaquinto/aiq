@@ -258,8 +258,10 @@ class ChatResearcherAgent:
             # report version.  Only new full-depth research is submitted async.
             if self.deep_research_job_submitter is not None and not state.edit_instruction:
                 job_id = await self.deep_research_job_submitter(state)
-                response = f"Deep research job submitted. Job ID: {job_id}"
-                return {"messages": [AIMessage(content=response)]}
+                return {
+                    "messages": [AIMessage(content="Deep research started.")],
+                    "deep_research_job_id": job_id,
+                }
 
             research_query = state.original_query or get_latest_user_query(state.messages)
 

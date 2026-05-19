@@ -55,12 +55,20 @@ export async function GET(
     const backendUrl = buildBackendUrl(path)
     const authHeaders = await getAuthHeaders(req)
 
-    const response = await fetch(backendUrl, {
+    // Forward query params (e.g., last_event_id for SSE reconnection)
+    const searchParams = req.nextUrl.searchParams.toString()
+    const fullUrl = searchParams ? `${backendUrl}?${searchParams}` : backendUrl
+
+    // Detect SSE requests (chat events endpoint)
+    const isSSE = path.includes('events')
+
+    const response = await fetch(fullUrl, {
       method: 'GET',
       headers: {
         ...authHeaders,
-        Accept: 'application/json',
+        Accept: isSSE ? 'text/event-stream' : 'application/json',
       },
+      ...(isSSE ? { signal: req.signal } : {}),
     })
 
     if (!response.ok) {
@@ -71,6 +79,19 @@ export async function GET(
         }),
         { status: response.status, headers: { 'Content-Type': 'application/json' } }
       )
+    }
+
+    // SSE responses: stream through without buffering
+    if (isSSE && response.body) {
+      return new NextResponse(response.body, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        },
+      })
     }
 
     const data = await response.json()
@@ -115,6 +136,53 @@ export async function POST(
       method: 'POST',
       headers,
       ...(body ? { body, duplex: 'half' } : {}),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      return new NextResponse(
+        JSON.stringify({
+          error: { code: 'BACKEND_ERROR', message: `Backend returned ${response.status}: ${errorText}` },
+        }),
+        { status: response.status, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const data = await response.json()
+    return NextResponse.json(data, { status: response.status })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return new NextResponse(
+      JSON.stringify({ error: { code: 'PROXY_ERROR', message } }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+}
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+): Promise<Response> {
+  try {
+    const { path } = await params
+    const backendUrl = buildBackendUrl(path)
+    const authHeaders = await getAuthHeaders(req)
+
+    let body: string | undefined
+    try {
+      const json = await req.json()
+      body = JSON.stringify(json)
+    } catch {
+      body = undefined
+    }
+
+    const response = await fetch(backendUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      ...(body ? { body } : {}),
     })
 
     if (!response.ok) {

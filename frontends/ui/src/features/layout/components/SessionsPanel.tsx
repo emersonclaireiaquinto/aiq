@@ -15,7 +15,6 @@ import { Flex, Text, Button, SidePanel } from '@/adapters/ui'
 import { Chat, Edit, Trash, Plus, Search, LoadingSpinner } from '@/adapters/ui/icons'
 import { useLayoutStore } from '../store'
 import { useChatStore } from '@/features/chat'
-import { checkStorageHealth } from '@/features/chat/lib/storage-manager'
 import { DeleteSessionConfirmationModal } from './DeleteSessionConfirmationModal'
 import { DeleteAllSessionsConfirmationModal } from './DeleteAllSessionsConfirmationModal'
 
@@ -70,15 +69,6 @@ export const SessionsPanel: FC<SessionsPanelProps> = ({
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [deleteAllModalOpen, setDeleteAllModalOpen] = useState(false)
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null)
-
-  // Storage usage percentage — refreshes only when the panel opens
-  const [storagePercent, setStoragePercent] = useState<number>(0)
-  useEffect(() => {
-    if (isSessionsPanelOpen) {
-      const { percentUsed } = checkStorageHealth()
-      setStoragePercent(Math.round(percentUsed))
-    }
-  }, [isSessionsPanelOpen])
 
   // Check if any session has active operations
   const anySessionBusy = hasAnyBusySession()
@@ -154,10 +144,7 @@ export const SessionsPanel: FC<SessionsPanelProps> = ({
       slotFooter={
         <Flex direction="col" gap="1">
           <Text kind="body/regular/xs" className="text-subtle">
-            Using {storagePercent}% of browser storage quota
-          </Text>
-          <Text kind="body/regular/xs" className="text-subtle">
-            Note: Sessions and files are saved for a limited time before automatic deletion.
+            Sessions are stored on the server.
           </Text>
         </Flex>
       }

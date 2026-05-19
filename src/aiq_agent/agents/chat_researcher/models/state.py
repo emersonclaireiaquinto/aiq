@@ -64,3 +64,4 @@ class ChatResearcherState(BaseModel):
     report_version_ids: list[str] = Field(default_factory=list)
     edit_instruction: str | None = None
     conversation_id: str | None = None
+    deep_research_job_id: str | None = None

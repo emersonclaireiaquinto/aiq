@@ -52,29 +52,19 @@ from .utils import extract_report_context
 # Used to backfill the ReportVersionStore on the next follow-up turn.
 _pending_deep_research_jobs: dict[str, str] = {}
 
-_JOB_ID_PATTERN = "Deep research job submitted. Job ID: "
 
-
-async def _backfill_from_event_store(job_id: str, conversation_id: str, store) -> None:
-    """Read the final report from the EventStore and store it as a ReportVersion."""
+async def _extract_report_from_events(db_url: str, job_id: str) -> str | None:
+    """Extract the final_report artifact content from a completed job's events."""
     import json
-    import os
 
-    from aiq_agent.common.report_version_store import ReportVersion
+    from aiq_api.jobs import EventStore
 
-    db_url = os.environ.get("NAT_JOB_STORE_DB_URL", "sqlite:///./data/jobs.db")
-    logger.info("Backfill: querying EventStore for job %s (db_url=%s)", job_id, db_url)
     try:
-        from aiq_api.jobs import EventStore
-
         events = await EventStore.get_events_async(db_url, job_id, after_id=0, limit=5000)
     except Exception as exc:
-        logger.warning("Backfill: could not query EventStore for job %s: %s", job_id, exc)
-        return
+        logger.warning("Could not query EventStore for job %s: %s", job_id, exc)
+        return None
 
-    logger.info("Backfill: found %d events for job %s", len(events), job_id)
-
-    report_content = None
     for evt in reversed(events):
         evt_data = evt.get("data", {})
         if isinstance(evt_data, str):
@@ -88,12 +78,25 @@ async def _backfill_from_event_store(job_id: str, conversation_id: str, store) -
             ocat = evt_data.get("output_category")
             clen = len(evt_data.get("content", "")) if isinstance(evt_data.get("content"), str) else 0
             if atype == "output" and ocat in ("final_report", None) and clen > 200:
-                report_content = evt_data["content"]
-                logger.info("Backfill: found report artifact (output_category=%s, %d chars)", ocat, clen)
-                break
+                logger.info("Found report artifact (output_category=%s, %d chars) for job %s", ocat, clen, job_id)
+                return evt_data["content"]
 
+    logger.warning("No final_report artifact found in events for job %s", job_id)
+    return None
+
+
+async def _backfill_from_event_store(job_id: str, conversation_id: str, store) -> None:
+    """Read the final report from the EventStore and store it as a ReportVersion."""
+    import os
+
+    from aiq_agent.common.report_version_store import ReportVersion
+
+    db_url = os.environ.get("NAT_JOB_STORE_DB_URL", "sqlite:///./data/jobs.db")
+    logger.info("Backfill: querying EventStore for job %s (db_url=%s)", job_id, db_url)
+
+    report_content = await _extract_report_from_events(db_url, job_id)
     if not report_content:
-        logger.warning("Backfill: no final_report artifact found in %d events for job %s", len(events), job_id)
+        logger.warning("Backfill: no report found for job %s", job_id)
         return
 
     version = ReportVersion(
@@ -103,6 +106,38 @@ async def _backfill_from_event_store(job_id: str, conversation_id: str, store) -
     )
     await store.append(version)
     logger.info("Backfilled report version %s from EventStore job %s", version.version_id, job_id)
+
+
+async def _await_job_completion(db_url: str, job_id: str, timeout: float = 600.0) -> str | None:
+    """Poll job_info until the job reaches a terminal status. Returns the status string or None on timeout."""
+    import asyncio
+
+    from aiq_api.jobs import EventStore
+    from sqlalchemy import text
+
+    poll_interval = 3.0
+    elapsed = 0.0
+    terminal = frozenset({"success", "failure", "interrupted"})
+
+    while elapsed < timeout:
+        try:
+            engine = EventStore._get_or_create_async_engine(db_url)
+            async with engine.connect() as conn:
+                result = await conn.execute(
+                    text("SELECT status FROM job_info WHERE job_id = :job_id"),
+                    {"job_id": job_id},
+                )
+                row = result.fetchone()
+                if row and row[0] in terminal:
+                    return row[0]
+        except Exception as e:
+            logger.debug("Job status check failed for %s: %s", job_id, e)
+
+        await asyncio.sleep(poll_interval)
+        elapsed += poll_interval
+
+    logger.warning("Timeout waiting for job %s after %.0fs", job_id, timeout)
+    return None
 
 
 logger = logging.getLogger(__name__)
@@ -327,7 +362,6 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
                 if state.clarifier_result:
                     input_text = f"{input_text}\n\n## Clarification Context\n{state.clarifier_result}"
 
-                # Serialize available_documents for the Dask worker
                 available_docs = None
                 if state.available_documents:
                     available_docs = [doc.model_dump() for doc in state.available_documents]
@@ -336,13 +370,39 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
                         len(available_docs),
                     )
 
-                return await submit_agent_job(
+                job_id = await submit_agent_job(
                     agent_type="deep_researcher",
                     input_text=input_text,
                     owner=owner,
                     available_documents=available_docs,
                     data_sources=state.data_sources,
                 )
+
+                import asyncio
+
+                conversation_id = Context.get().conversation_id
+                if conversation_id:
+                    import os as _os
+
+                    db_url = _os.environ.get("NAT_JOB_STORE_DB_URL", "sqlite:///./data/jobs.db")
+                    from aiq_api.jobs.event_store import EventStore
+
+                    conv_store = EventStore(db_url, job_id=conversation_id)
+                    conv_store.store(
+                        {
+                            "type": "deep_research.started",
+                            "data": {"job_id": job_id},
+                        }
+                    )
+                    from aiq_api.chat.event_bridge import start_event_bridge
+
+                    asyncio.create_task(
+                        start_event_bridge(db_url, job_id, conversation_id),
+                        name=f"bridge-{conversation_id}-{job_id}",
+                    )
+                    logger.info("Deep research job %s submitted, bridge started for %s", job_id, conversation_id)
+
+                return job_id
 
             deep_research_job_submitter = _submit_deep_job
         else:
@@ -370,17 +430,61 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
     if deep_research_job_submitter is not None:
 
         async def _submit_edit_job(instruction: str, conversation_id: str) -> str:
+            """Submit follow-up deep research, wait for completion, return report content."""
+            import asyncio
+            import os
+
             from aiq_api.jobs import submit_agent_job as _submit
 
             from aiq_agent.auth import get_current_user_info
 
             user_info = get_current_user_info()
             owner = user_info.email if user_info and user_info.email else "anonymous"
-            return await _submit(
+            job_id = await _submit(
                 agent_type="deep_researcher",
                 input_text=instruction,
                 owner=owner,
             )
+            logger.info("Follow-up deep research job %s submitted for conversation %s", job_id, conversation_id)
+
+            db_url = os.environ.get("NAT_JOB_STORE_DB_URL", "sqlite:///./data/jobs.db")
+
+            # Emit deep_research.started so the frontend shows progress UI
+            from aiq_api.jobs.event_store import EventStore
+
+            conv_store = EventStore(db_url, job_id=conversation_id)
+            conv_store.store(
+                {
+                    "type": "deep_research.started",
+                    "data": {"job_id": job_id, "is_followup": True, "backend_integration": True},
+                }
+            )
+
+            # Bridge job events to conversation stream so frontend sees progress
+            from aiq_api.chat.event_bridge import start_event_bridge
+
+            asyncio.create_task(
+                start_event_bridge(db_url, job_id, conversation_id),
+                name=f"bridge-followup-{conversation_id}-{job_id}",
+            )
+
+            # Wait for the deep research job to finish
+            status = await _await_job_completion(db_url, job_id)
+            if status != "success":
+                return f"Deep research job {job_id} ended with status: {status or 'timeout'}."
+
+            # Retrieve the final report from the job's events
+            report_content = await _extract_report_from_events(db_url, job_id)
+            if not report_content:
+                return f"Deep research job {job_id} completed but produced no report."
+
+            logger.info(
+                "Follow-up deep research job %s completed: %d chars for conversation %s",
+                job_id,
+                len(report_content),
+                conversation_id,
+            )
+            return report_content
 
         edit_job_submitter = _submit_edit_job
 
@@ -544,49 +648,23 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
 
         if isinstance(result, dict):
             messages = result.get("messages", [])
+            job_id = result.get("deep_research_job_id")
         else:
             messages = getattr(result, "messages", [])
+            job_id = getattr(result, "deep_research_job_id", None)
 
         if messages:
             response_content = messages[-1].content
         else:
             response_content = "No response generated."
 
-        # If the report was edited during this turn, embed the updated content
-        # in the response so the frontend can update the report panel.
         post_versions = await report_version_store.list(nat_context_conversation_id)
         if len(post_versions) > len(version_ids):
-            import json as _json
+            logger.info("Report version created during turn: %s", post_versions[-1].version_id)
 
-            latest = post_versions[-1]
-            parent_content = None
-            if latest.parent_version_id:
-                parent = await report_version_store.get(nat_context_conversation_id, latest.parent_version_id)
-                parent_content = parent.content if parent else None
-            response_content = _json.dumps(
-                {
-                    "message": response_content,
-                    "report_version": {
-                        "versionId": latest.version_id,
-                        "parentVersionId": latest.parent_version_id,
-                        "content": latest.content,
-                        "triggeringQuery": latest.triggering_query,
-                        "parentContent": parent_content,
-                    },
-                }
-            )
-            logger.info("Embedding updated report version %s in response", latest.version_id)
-
-        # Track async deep research job IDs for backfilling on the next turn.
-        if isinstance(response_content, str) and _JOB_ID_PATTERN in response_content:
-            import re
-
-            match = re.search(r"Job ID: ([a-f0-9-]+)", response_content)
-            if match:
-                _pending_deep_research_jobs[nat_context_conversation_id] = match.group(1)
-                logger.info(
-                    "Tracking deep research job %s for conversation %s", match.group(1), nat_context_conversation_id
-                )
+        if job_id:
+            _pending_deep_research_jobs[nat_context_conversation_id] = job_id
+            logger.info("Tracking deep research job %s for conversation %s", job_id, nat_context_conversation_id)
 
         # Exit after response when --input is provided
         if "--input" in sys.argv:

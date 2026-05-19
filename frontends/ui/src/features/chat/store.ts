@@ -9,7 +9,7 @@
  */
 
 import { create } from 'zustand'
-import { devtools, persist, createJSONStorage, type StorageValue, type PersistStorage } from 'zustand/middleware'
+import { devtools } from 'zustand/middleware'
 import { v4 as uuidv4 } from 'uuid'
 import type {
   ChatStore,
@@ -42,136 +42,36 @@ import {
 } from './lib/deep-research-session-storage'
 import { isUnavailableDeepResearchJobError } from './lib/deep-research-errors'
 import { hasActiveDeepResearchJob } from './lib/session-activity'
-import {
-  logStorageWrite,
-  logQuotaExceededPruning,
-  logCriticalSessionsClear,
-  logStorageAvailability,
-  logExternalStorageEvent,
-  logStoreHydration,
-} from './lib/storage-logger'
-import { pruneMessageForStorage } from './lib/prune-message-for-storage'
-import { ensureStorageCapacity, checkStorageHealth } from './lib/storage-manager'
+import * as sessionsClient from '@/adapters/api/sessions-client'
 import { useLayoutStore } from '@/features/layout/store'
 
-const isQuotaExceededError = (error: unknown): boolean => {
-  if (!(error instanceof Error)) return false
-  if (error.name === 'QuotaExceededError') return true
-  return /quota|exceeded|storage/i.test(error.message)
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function parseJsonField<T>(value: unknown, fallback: T): T {
+  if (value === null || value === undefined) return fallback
+  if (typeof value === 'string') {
+    try { return JSON.parse(value) as T } catch { return fallback }
+  }
+  return value as T
 }
 
-type PersistedChatState = {
-  currentUserId: ChatState['currentUserId']
-  conversations: ChatState['conversations']
-  currentConversation: ChatState['currentConversation']
-  pendingInteraction: ChatState['pendingInteraction']
-}
+// ── Server sync helpers ──────────────────────────────────────────────
 
-type PersistedChatStorageValue = StorageValue<PersistedChatState>
+let _syncTimer: ReturnType<typeof setTimeout> | null = null
+const SYNC_DEBOUNCE_MS = 300
 
-const prunePersistedChatState = (value: PersistedChatStorageValue): PersistedChatStorageValue => {
-  const state = value.state
+function debouncedSyncToServer(conversationId: string) {
+  if (_syncTimer) clearTimeout(_syncTimer)
+  _syncTimer = setTimeout(() => {
+    const state = useChatStore.getState()
+    const conv = state.conversations.find((c) => c.id === conversationId)
+    if (!conv) return
 
-  const conversations: Conversation[] = (state.conversations ?? []).map((conv) => ({
-    ...conv,
-    messages: (conv.messages ?? []).map(pruneMessageForStorage),
-  }))
-
-  // Store only the ID reference — the full object already lives in conversations[].
-  // On read, getItem reconstructs currentConversation from conversations by ID.
-  // This avoids serializing the active session's messages twice in JSON.
-  const currentConversationId = state.currentConversation?.id ?? null
-
-  return {
-    ...value,
-    state: {
-      currentUserId: state.currentUserId ?? null,
-      conversations,
-      currentConversation: currentConversationId as unknown as Conversation | null,
-      pendingInteraction: state.pendingInteraction ?? null,
-    },
-  }
-}
-
-const createResilientStorage = (): PersistStorage<PersistedChatState> | undefined => {
-  const base = createJSONStorage<PersistedChatState>(() => localStorage)
-  if (!base) {
-    logStorageAvailability(false)
-    return undefined
-  }
-
-  return {
-    getItem: async (name: string): Promise<PersistedChatStorageValue | null> => {
-      const raw = await base.getItem(name)
-      if (!raw) return null
-
-      // Reconstruct currentConversation from the ID stored by prunePersistedChatState.
-      const storedId = raw.state.currentConversation as unknown as string | null
-      if (storedId) {
-        const conversations = raw.state.conversations ?? []
-        raw.state.currentConversation = conversations.find((c) => c.id === storedId) ?? null
-      }
-
-      // Reconstruct Date objects in per-conversation reportVersions (JSON serializes them as strings)
-      for (const conv of raw.state.conversations ?? []) {
-        if (conv.reportVersions) {
-          conv.reportVersions = conv.reportVersions.map((v) => ({
-            ...v,
-            createdAt: new Date(v.createdAt),
-          }))
-        }
-      }
-
-      return raw
-    },
-    removeItem: base.removeItem,
-    setItem: (name: string, value: PersistedChatStorageValue) => {
-      const prunedValue = prunePersistedChatState(value)
-
-      try {
-        base.setItem(name, prunedValue)
-        logStorageWrite(prunedValue.state.conversations ?? [], prunedValue.state.currentUserId ?? null)
-      } catch (error) {
-        if (!isQuotaExceededError(error)) {
-          throw error
-        }
-
-        const beforeConversations = prunedValue.state.conversations ?? []
-        const beforeCount = beforeConversations.length
-        const beforeSizeKB = Math.round(
-          (JSON.stringify(beforeConversations).length * 2) / 1024
-        )
-
-        logQuotaExceededPruning(beforeCount, beforeCount, beforeSizeKB, beforeSizeKB)
-
-        // Last resort: clear all conversations
-        try {
-          const lostSessionIds = beforeConversations.map((c) => c.id)
-
-          base.removeItem(name)
-          base.setItem(name, {
-            ...value,
-            state: {
-              currentUserId: value.state.currentUserId ?? null,
-              conversations: [],
-              currentConversation: null,
-              pendingInteraction: null,
-            },
-          })
-
-          logCriticalSessionsClear(
-            value.state.currentUserId ?? null,
-            lostSessionIds,
-            error
-          )
-        } catch (finalError) {
-          console.error('[SessionsStore] ❌ CATASTROPHIC: Failed to clear sessions', {
-            error: finalError instanceof Error ? finalError.message : String(finalError),
-          })
-        }
-      }
-    },
-  }
+    sessionsClient.updateConversation(conversationId, {
+      title: conv.title,
+      enabled_data_source_ids: conv.enabledDataSourceIds,
+    }).catch((err) => console.warn('[sync] Failed to update conversation:', err))
+  }, SYNC_DEBOUNCE_MS)
 }
 
 const initialState: ChatState = {
@@ -275,9 +175,8 @@ const restoreConversationDataSources = (conversation: Conversation): void => {
 
 export const useChatStore = create<ChatStore>()(
   devtools(
-    persist(
-      (set, get) => ({
-        ...initialState,
+    (set, get) => ({
+      ...initialState,
 
         setCurrentUser: (userId: string | null) => {
           const { conversations, currentConversation } = get()
@@ -393,6 +292,14 @@ export const useChatStore = create<ChatStore>()(
             false,
             'createConversation'
           )
+
+          // Persist to server (fire and forget)
+          sessionsClient.createConversation({
+            id: newConversation.id,
+            title: newConversation.title,
+            enabled_data_source_ids: newConversation.enabledDataSourceIds,
+          }).catch((err) => console.warn('[sync] Failed to create conversation on server:', err))
+
           return newConversation
         },
 
@@ -448,8 +355,6 @@ export const useChatStore = create<ChatStore>()(
             return undefined
           }
 
-          ensureStorageCapacity(currentConversation?.id ?? null, currentUserId)
-
           const layoutState = useLayoutStore.getState()
           const defaultEnabledDataSourceIds = getDefaultEnabledDataSourceIds()
           layoutState.setEnabledDataSources(defaultEnabledDataSourceIds)
@@ -488,6 +393,14 @@ export const useChatStore = create<ChatStore>()(
             false,
             'ensureSession'
           )
+
+          // Persist to server
+          sessionsClient.createConversation({
+            id: newConversation.id,
+            title: newConversation.title,
+            enabled_data_source_ids: newConversation.enabledDataSourceIds,
+          }).catch((err) => console.warn('[sync] Failed to create conversation on server:', err))
+
           return newConversation.id
         },
 
@@ -501,10 +414,6 @@ export const useChatStore = create<ChatStore>()(
             activeDeepResearchMessageId,
             deepResearchLastEventId,
           } = get()
-
-          if (currentConversation?.id !== conversationId) {
-            ensureStorageCapacity(conversationId, currentUserId)
-          }
 
           const conversation = conversations.find((c) => c.id === conversationId)
 
@@ -531,38 +440,50 @@ export const useChatStore = create<ChatStore>()(
             // This ensures fresh data loads when panel is reopened
             useLayoutStore.getState().closeRightPanel()
 
-            // Always clear deep research ephemeral state when switching conversations
-            // SSE will be disconnected by hook cleanup when deepResearchJobId becomes null
-            const convVersions = conversation.reportVersions ?? []
-            set(
-              {
-                currentConversation: conversation,
-                deepResearchJobId: null,
-                deepResearchLastEventId: null,
-                isDeepResearchStreaming: false,
-                deepResearchStatus: null,
-                deepResearchOwnerConversationId: null,
-                activeDeepResearchMessageId: null,
-                deepResearchCitations: [],
-                deepResearchTodos: [],
-                deepResearchLLMSteps: [],
-                deepResearchAgents: [],
-                deepResearchToolCalls: [],
-                deepResearchFiles: [],
-                deepResearchStreamLoaded: false,
-                reportContent: '',
-                reportContentCategory: null,
-                selectedReportVersionId: convVersions.length > 0 ? convVersions[convVersions.length - 1].versionId : null,
-                isFollowupDeepResearch: false,
-                pendingReportIntegration: null,
-              },
-              false,
-              'selectConversation'
-            )
+            const applyConversation = (conv: Conversation) => {
+              const convVersions = conv.reportVersions ?? []
+              set(
+                {
+                  currentConversation: conv,
+                  deepResearchJobId: null,
+                  deepResearchLastEventId: null,
+                  isDeepResearchStreaming: false,
+                  deepResearchStatus: null,
+                  deepResearchOwnerConversationId: null,
+                  activeDeepResearchMessageId: null,
+                  deepResearchCitations: [],
+                  deepResearchTodos: [],
+                  deepResearchLLMSteps: [],
+                  deepResearchAgents: [],
+                  deepResearchToolCalls: [],
+                  deepResearchFiles: [],
+                  deepResearchStreamLoaded: false,
+                  reportContent: '',
+                  reportContentCategory: null,
+                  selectedReportVersionId: convVersions.length > 0 ? convVersions[convVersions.length - 1].versionId : null,
+                  isFollowupDeepResearch: false,
+                  pendingReportIntegration: null,
+                },
+                false,
+                'selectConversation'
+              )
+              get().restoreSessionState(conv)
+              restoreConversationDataSources(conv)
+            }
 
-            // Restore basic session state (thinkingSteps) from messages
-            get().restoreSessionState(conversation)
-            restoreConversationDataSources(conversation)
+            // If messages haven't been loaded yet (hydrated from server list), lazy-load them
+            if (conversation.messages.length === 0) {
+              // Set conversation immediately (shows it selected in sidebar)
+              applyConversation(conversation)
+              // Then load full data from server
+              loadConversationFromServer(conversationId).then((loaded) => {
+                if (loaded && get().currentConversation?.id === conversationId) {
+                  applyConversation(loaded)
+                }
+              })
+            } else {
+              applyConversation(conversation)
+            }
           }
         },
 
@@ -740,6 +661,22 @@ export const useChatStore = create<ChatStore>()(
             false,
             'completeAssistantMessage'
           )
+
+          // Sync the completed user+assistant message pair to server
+          const recentMessages = updatedConversation.messages.slice(-2)
+          const toSync = recentMessages
+            .filter((m) => m.role === 'user' || m.role === 'assistant')
+            .map((m) => ({
+              id: m.id,
+              role: m.role,
+              content: m.content,
+              message_type: m.messageType,
+              created_at: m.timestamp?.toISOString(),
+            }))
+          if (toSync.length > 0) {
+            sessionsClient.appendMessages(updatedConversation.id, { messages: toSync })
+              .catch((err) => console.warn('[sync] Failed to sync messages to server:', err))
+          }
         },
 
         setLoading: (isLoading: boolean) => {
@@ -820,6 +757,10 @@ export const useChatStore = create<ChatStore>()(
             false,
             'deleteConversation'
           )
+
+          // Sync deletion to server
+          sessionsClient.deleteConversation(conversationId)
+            .catch((err) => console.warn('[sync] Failed to delete conversation on server:', err))
         },
 
         deleteAllConversations: () => {
@@ -908,6 +849,13 @@ export const useChatStore = create<ChatStore>()(
             false,
             'deleteAllConversations'
           )
+
+          // Sync bulk deletion to server
+          const idsToDelete = userConversations.map((c) => c.id)
+          if (idsToDelete.length > 0) {
+            sessionsClient.bulkDeleteConversations(idsToDelete)
+              .catch((err) => console.warn('[sync] Failed to bulk delete on server:', err))
+          }
         },
 
         updateConversationTitle: (conversationId: string, title: string) => {
@@ -930,6 +878,8 @@ export const useChatStore = create<ChatStore>()(
             false,
             'updateConversationTitle'
           )
+
+          debouncedSyncToServer(conversationId)
         },
 
         saveDataSourcesToConversation: (ids: string[]) => {
@@ -956,6 +906,8 @@ export const useChatStore = create<ChatStore>()(
             false,
             'saveDataSourcesToConversation'
           )
+
+          debouncedSyncToServer(updatedConversation.id)
         },
 
         // ============================================================
@@ -1371,12 +1323,6 @@ export const useChatStore = create<ChatStore>()(
             'addAgentResponse'
           )
 
-          // Proactive storage check after response — this is when storage
-          // meaningfully grows, not just on session create/switch.
-          if (!checkStorageHealth().isHealthy) {
-            const { currentUserId } = get()
-            ensureStorageCapacity(currentConversation.id, currentUserId)
-          }
         },
 
         addAgentResponseWithMeta: (
@@ -2590,9 +2536,8 @@ export const useChatStore = create<ChatStore>()(
           // Restore planMessages from unresponded prompt (during HITL wait) or last agent response
           const restoredPlanMessages = unrespondedPrompt?.planMessages || lastAgentResponse?.planMessages || []
 
-          // NOTE: Heavy research data fields are NO LONGER restored from localStorage
-          // They were removed by pruneMessageForStorage to save space (~96% reduction)
-          // Research data will be fetched from backend on-demand via importStreamOnly()
+          // NOTE: Heavy research data fields are not stored on messages in the DB.
+          // Research data is fetched from backend on-demand via importStreamOnly()
           // when user opens ResearchPanel tabs or clicks "View Report"
 
           set(
@@ -2742,20 +2687,6 @@ export const useChatStore = create<ChatStore>()(
           return state.conversations.some((conv) => state.isSessionBusy(conv.id))
         },
       }),
-      {
-        name: 'aiq-chat-store',
-        storage: typeof window === 'undefined' ? undefined : createResilientStorage(),
-        partialize: (state) => ({
-          // Persist conversations and user context, not streaming state or panel content
-          // Report versions are persisted per-conversation inside Conversation.reportVersions
-          currentUserId: state.currentUserId,
-          conversations: state.conversations,
-          currentConversation: state.currentConversation,
-          // Persist pending HITL interaction for page refresh recovery
-          pendingInteraction: state.pendingInteraction,
-        }),
-      }
-    ),
     { name: 'ChatStore' }
   )
 )
@@ -2779,30 +2710,101 @@ export const selectHasConnectionError = (state: ChatStore): boolean =>
   ) ?? false
 
 // ============================================================
-// Storage Event Monitoring (for debugging session clearing)
+// Server Hydration
 // ============================================================
 
-if (typeof window !== 'undefined') {
-  // Log initial hydration state (dev-only)
-  const initialState = useChatStore.getState()
-  logStoreHydration(
-    true,
-    initialState.conversations?.length ?? 0,
-    initialState.currentUserId
-  )
-
-  // Monitor storage events from other tabs or browser extensions
-  window.addEventListener('storage', (event) => {
-    // Only log events related to our chat store
-    if (event.key === 'aiq-chat-store') {
-      logExternalStorageEvent(event.key, event.oldValue, event.newValue)
-
-      // If the store was cleared externally, this is critical
-      if (event.oldValue !== null && event.newValue === null) {
-        console.error(
-          '[SessionsStore] ❌ CRITICAL: Storage cleared by external source (browser extension, dev tools, or another tab)'
-        )
+/**
+ * Hydrate the store from the server on app init.
+ * Fetches conversation list (metadata only). Full messages are
+ * lazy-loaded when a conversation is selected.
+ *
+ * Also handles one-time migration from localStorage if present.
+ */
+export async function hydrateFromServer(): Promise<void> {
+  // One-time migration: if localStorage still has data, push it to server
+  if (typeof window !== 'undefined') {
+    const raw = localStorage.getItem('aiq-chat-store')
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw)
+        const conversations = parsed?.state?.conversations ?? []
+        if (conversations.length > 0) {
+          await sessionsClient.migrateFromLocalStorage({
+            conversations,
+            current_conversation_id: parsed?.state?.currentConversation ?? null,
+          })
+          localStorage.removeItem('aiq-chat-store')
+          console.info('[hydrate] Migrated %d conversations from localStorage', conversations.length)
+        } else {
+          localStorage.removeItem('aiq-chat-store')
+        }
+      } catch (err) {
+        console.warn('[hydrate] Failed to migrate localStorage:', err)
       }
     }
-  })
+  }
+
+  try {
+    const { conversations } = await sessionsClient.listConversations(500)
+    const mapped: Conversation[] = conversations.map((c) => ({
+      id: c.id,
+      userId: useChatStore.getState().currentUserId || 'default-user',
+      title: c.title,
+      messages: [],
+      createdAt: new Date(c.created_at),
+      updatedAt: new Date(c.updated_at),
+      enabledDataSourceIds: parseJsonField(c.enabled_data_source_ids, []),
+    }))
+
+    useChatStore.setState({
+      conversations: mapped,
+    })
+  } catch (err) {
+    console.warn('[hydrate] Failed to load conversations from server:', err)
+  }
+}
+
+/**
+ * Load full conversation detail (messages + report versions) from the server.
+ * Called when a conversation is selected.
+ */
+export async function loadConversationFromServer(conversationId: string): Promise<Conversation | null> {
+  try {
+    const detail = await sessionsClient.getConversation(conversationId)
+    const conversation: Conversation = {
+      id: detail.id,
+      userId: detail.user_id,
+      title: detail.title,
+      messages: detail.messages.map((m) => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant' | 'system',
+        content: m.content,
+        timestamp: new Date(m.created_at),
+        messageType: m.message_type ?? undefined,
+        ...parseJsonField(m.metadata, {}),
+      })) as ChatMessage[],
+      createdAt: new Date(detail.created_at),
+      updatedAt: new Date(detail.updated_at),
+      enabledDataSourceIds: parseJsonField(detail.enabled_data_source_ids, []),
+      reportVersions: detail.report_versions.map((v) => ({
+        versionId: v.version_id,
+        parentVersionId: v.parent_version_id,
+        content: v.content,
+        triggeringQuery: v.triggering_query,
+        createdAt: new Date(v.created_at),
+      })),
+    }
+
+    // Update the conversation in the store
+    useChatStore.setState((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === conversationId ? conversation : c
+      ),
+    }))
+
+    return conversation
+  } catch (err) {
+    console.warn('[loadConversation] Failed to load from server:', err)
+    return null
+  }
 }

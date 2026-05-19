@@ -18,13 +18,16 @@
 Provides a Protocol for storing and retrieving report versions, keyed by
 conversation_id. The default InMemoryReportVersionStore keeps everything
 in a process-local dict — suitable for dev / single-process deployments.
-Swap to a SQL-backed implementation for persistence across restarts.
+
+When AIQ_SESSIONS_DB is set to a PostgreSQL DSN, get_report_version_store()
+returns a PostgresReportVersionStore for persistence across restarts.
 """
 
 from __future__ import annotations
 
 import datetime as _dt
 import logging
+import os
 import uuid
 from collections import defaultdict
 from datetime import datetime
@@ -105,11 +108,46 @@ class InMemoryReportVersionStore:
 
 # Process-wide singleton, mirroring the get_checkpointer pattern.
 _report_version_store: InMemoryReportVersionStore | None = None
+_postgres_report_version_store = None
 
 
-def get_report_version_store() -> InMemoryReportVersionStore:
-    """Return the shared in-memory report version store."""
+def get_report_version_store() -> ReportVersionStore:
+    """Return the shared report version store.
+
+    Uses PostgresReportVersionStore when AIQ_SESSIONS_DB is set to a
+    PostgreSQL DSN, otherwise falls back to InMemoryReportVersionStore.
+    """
+    db_url = os.environ.get("AIQ_SESSIONS_DB") or os.environ.get("NAT_JOB_STORE_DB_URL")
+    if db_url and db_url.startswith("postgresql"):
+        return _get_postgres_report_version_store(db_url)
+    return _get_in_memory_report_version_store()
+
+
+def _get_in_memory_report_version_store() -> InMemoryReportVersionStore:
     global _report_version_store
     if _report_version_store is None:
         _report_version_store = InMemoryReportVersionStore()
     return _report_version_store
+
+
+def _get_postgres_report_version_store(db_url: str):
+    global _postgres_report_version_store
+    if _postgres_report_version_store is None:
+        try:
+            from aiq_api.sessions.postgres_report_store import PostgresReportVersionStore
+            from aiq_api.sessions.store import _normalize_db_url
+            from sqlalchemy.ext.asyncio import create_async_engine
+
+            engine = create_async_engine(
+                _normalize_db_url(db_url),
+                pool_pre_ping=True,
+                pool_size=5,
+                max_overflow=10,
+                pool_recycle=1800,
+            )
+            _postgres_report_version_store = PostgresReportVersionStore(engine)
+            logger.info("Using PostgresReportVersionStore (db: %s)", db_url[:50])
+        except Exception:
+            logger.warning("Failed to initialize PostgresReportVersionStore, falling back to in-memory", exc_info=True)
+            return _get_in_memory_report_version_store()
+    return _postgres_report_version_store

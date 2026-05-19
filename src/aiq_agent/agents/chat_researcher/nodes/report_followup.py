@@ -139,10 +139,13 @@ class ReportFollowup:
 
         @tool
         async def request_deep_research(instruction: str) -> str:
-            """Submit a deep research job for edits requiring new external sources. Returns a job ID."""
+            """Request deep research for edits requiring new external sources. Returns researched content."""
             if self.edit_job_submitter is not None:
-                job_id = await self.edit_job_submitter(instruction, conversation_id)
-                return f"Deep research job submitted. Job ID: {job_id}"
+                content = await self.edit_job_submitter(instruction, conversation_id)
+                return (
+                    f"Deep research completed. Here is the updated content. "
+                    f"Use edit_report or rewrite_report to integrate it into the report:\n\n{content}"
+                )
 
             if self.deep_research_fn is not None:
                 from aiq_agent.agents.deep_researcher.models import DeepResearchAgentState
@@ -227,14 +230,7 @@ class ReportFollowup:
         result = await graph.ainvoke(sub_state, config=config)
 
         result_messages = result.get("messages", []) if isinstance(result, dict) else result.messages
-        new_messages = result_messages[len(messages):]
-
-        # Check if request_deep_research was called — bubble the job signal
-        # up so the frontend can start SSE streaming.
-        for m in new_messages:
-            content = getattr(m, "content", "")
-            if isinstance(content, str) and "Deep research job submitted. Job ID:" in content:
-                return {"messages": [AIMessage(content=content)]}
+        new_messages = result_messages[len(messages) :]
 
         final_ai = None
         for m in reversed(new_messages):

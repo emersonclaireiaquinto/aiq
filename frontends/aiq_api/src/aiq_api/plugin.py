@@ -52,11 +52,15 @@ from nat.front_ends.fastapi.fastapi_front_end_plugin import FastApiFrontEndPlugi
 from nat.front_ends.fastapi.fastapi_front_end_plugin_worker import FastApiFrontEndPluginWorker
 from nat.front_ends.fastapi.fastapi_front_end_plugin_worker import FastApiFrontEndPluginWorkerBase
 
+from .chat.routes import configure as configure_chat
+from .chat.routes import router as chat_router
 from .jobs import EventStore
 from .jobs import get_connection_manager
 from .routes.collections import add_collection_routes
 from .routes.documents import add_document_routes
 from .routes.jobs import register_job_routes
+from .sessions.routes import router as sessions_router
+from .sessions.routes import set_store as set_session_store
 from .websocket_reconnect import install_reconnectable_handler
 
 logger = logging.getLogger(__name__)
@@ -151,11 +155,27 @@ class AIQAPIWorker(FastApiFrontEndPluginWorker):
         app.include_router(knowledge_router)
         logger.info("Knowledge API routes registered")
 
+        app.include_router(sessions_router)
+        logger.info("Session persistence routes registered")
+
+        app.include_router(chat_router)
+        logger.info("Chat API routes registered")
+
         return app
 
     @override
     async def add_routes(self, app: FastAPI, builder: WorkflowBuilder):
         await super().add_routes(app, builder)
+
+        # =====================================================================
+        # Session persistence store
+        # =====================================================================
+        await self._init_session_store()
+
+        # =====================================================================
+        # Chat API (SSE+REST) — inline runner for unified chat
+        # =====================================================================
+        await self._init_chat_runner()
 
         # =====================================================================
         # Async Job API routes
@@ -188,6 +208,57 @@ class AIQAPIWorker(FastApiFrontEndPluginWorker):
             logger.info("Debug console registered at /debug")
         except ImportError:
             pass
+
+    async def _init_session_store(self):
+        """Initialize the session persistence store from DB URL."""
+        import os
+
+        db_url = os.environ.get("AIQ_SESSIONS_DB") or os.environ.get("NAT_JOB_STORE_DB_URL")
+        if not db_url:
+            logger.info("No session DB configured (set AIQ_SESSIONS_DB or NAT_JOB_STORE_DB_URL)")
+            return
+
+        try:
+            from .sessions.store import ConversationStore
+            from .sessions.store import get_engine
+
+            engine = await get_engine(db_url)
+            store = ConversationStore(engine)
+            set_session_store(store)
+            logger.info("Session store initialized (db: %s)", db_url[:50])
+        except Exception:
+            logger.warning("Failed to initialize session store", exc_info=True)
+
+    async def _init_chat_runner(self):
+        """Initialize the inline chat runner with SSE event emission."""
+        import os
+
+        from .chat.inline_runner import InlineRunner
+        from .sessions.routes import _store as conversation_store
+
+        db_url = os.environ.get("AIQ_SESSIONS_DB") or os.environ.get("NAT_JOB_STORE_DB_URL")
+        if not db_url:
+            logger.info("No DB configured for chat runner — chat API will return 503")
+            return
+
+        if not self._session_managers:
+            logger.warning("No session manager available — chat runner not initialized")
+            return
+
+        try:
+            session_manager = self._session_managers[0]
+            step_adaptor = self.get_step_adaptor()
+
+            runner = InlineRunner(
+                session_manager=session_manager,
+                step_adaptor=step_adaptor,
+                event_store_db_url=db_url,
+                conversation_store=conversation_store,
+            )
+            configure_chat(runner, conversation_store, db_url)
+            logger.info("Chat runner initialized")
+        except Exception:
+            logger.warning("Failed to initialize chat runner", exc_info=True)
 
     def _install_signal_handlers(self):
         """Install signal handlers to notify SSE connections on shutdown."""
